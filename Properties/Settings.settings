@@ -1,0 +1,27 @@
+﻿<?xml version='1.0' encoding='utf-8'?>
+<SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings" CurrentProfile="(Default)" GeneratedClassNamespace="BinanceFuturesViewer.Properties" GeneratedClassName="Settings">
+  <Profiles />
+  <Settings>
+    <Setting Name="FuturesRestBaseUrl" Type="System.String" Scope="User">
+      <Value Profile="(Default)">https://fapi.binance.com</Value>
+    </Setting>
+    <Setting Name="FuturesWebSocketBaseUrl" Type="System.String" Scope="User">
+      <Value Profile="(Default)">wss://fstream.binance.com/market/ws</Value>
+    </Setting>
+    <Setting Name="ExchangeInfoEndpoint" Type="System.String" Scope="User">
+      <Value Profile="(Default)">/fapi/v1/exchangeInfo</Value>
+    </Setting>
+    <Setting Name="KlinesEndpoint" Type="System.String" Scope="User">
+      <Value Profile="(Default)">/fapi/v1/klines</Value>
+    </Setting>
+    <Setting Name="DefaultSymbol" Type="System.String" Scope="User">
+      <Value Profile="(Default)">BTCUSDT</Value>
+    </Setting>
+    <Setting Name="DefaultInterval" Type="System.String" Scope="User">
+      <Value Profile="(Default)">1h</Value>
+    </Setting>
+    <Setting Name="DefaultCandlesLimit" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">99</Value>
+    </Setting>
+  </Settings>
+</SettingsFile>
