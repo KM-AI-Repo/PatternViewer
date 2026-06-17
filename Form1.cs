@@ -15,12 +15,14 @@ namespace BinanceFuturesViewer
     {
         private readonly BinanceRestService restService = new BinanceRestService();
         private readonly BinanceWebSocketService webSocketService = new BinanceWebSocketService();
+        private readonly MarketCacheService marketCacheService = new MarketCacheService();
 
         private readonly object candlesLock = new object();
         private List<BinanceCandle> candles = new List<BinanceCandle>();
 
         private bool isUpdatingUi;
         private bool isLoadingChart;
+        private bool isResyncInProgress;
 
         public Form1()
         {
@@ -59,7 +61,6 @@ namespace BinanceFuturesViewer
         private void InitializeIntervals()
         {
             comboBoxInterval.Items.Clear();
-
             comboBoxInterval.Items.AddRange(BinanceIntervals.All);
 
             string defaultInterval = Properties.Settings.Default.DefaultInterval;
@@ -117,7 +118,16 @@ namespace BinanceFuturesViewer
             if (isUpdatingUi || isLoadingChart)
                 return;
 
-            await ReloadChartAndStreamAsync();
+            string selectedInterval = GetSelectedInterval();
+
+            if (!string.IsNullOrWhiteSpace(selectedInterval) &&
+                !string.Equals(Properties.Settings.Default.DefaultInterval, selectedInterval, StringComparison.Ordinal))
+            {
+                Properties.Settings.Default.DefaultInterval = selectedInterval;
+                Properties.Settings.Default.Save();
+            }
+
+            await LoadSymbolsAsync();
         }
 
         private async void ListBoxSymbols_SelectedIndexChanged(object sender, EventArgs e)
@@ -137,9 +147,15 @@ namespace BinanceFuturesViewer
                 btnReloadSymbols.Enabled = false;
                 listBoxSymbols.Enabled = false;
                 comboBoxInterval.Enabled = false;
-                lblStatus.Text = "Загрузка списка инструментов...";
 
-                var symbols = await restService.GetActiveUsdtPerpetualSymbolsAsync();
+                string interval = GetSelectedInterval();
+                int candleLimit = Properties.Settings.Default.DefaultCandlesLimit;
+
+                lblStatus.Text = $"Загрузка рынка ({interval}, {candleLimit} свечей на инструмент)...";
+
+                await marketCacheService.InitializeAsync(interval, candleLimit);
+
+                var symbols = marketCacheService.GetDisplaySymbols();
 
                 listBoxSymbols.BeginUpdate();
                 listBoxSymbols.DataSource = null;
@@ -159,12 +175,21 @@ namespace BinanceFuturesViewer
                     else
                         listBoxSymbols.SelectedIndex = 0;
                 }
+                else
+                {
+                    lock (candlesLock)
+                    {
+                        candles = new List<BinanceCandle>();
+                    }
 
-                lblStatus.Text = $"Загружено инструментов: {symbols.Count}";
+                    DrawCandles("-", GetSelectedInterval());
+                }
+
+                lblStatus.Text = $"Инструментов для показа: {symbols.Count}";
             }
             catch (Exception ex)
             {
-                lblStatus.Text = "Ошибка загрузки инструментов";
+                lblStatus.Text = "Ошибка загрузки рынка";
                 MessageBox.Show(ex.Message, "Ошибка", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
             finally
@@ -189,7 +214,6 @@ namespace BinanceFuturesViewer
             try
             {
                 isLoadingChart = true;
-
                 webSocketService.Disconnect();
 
                 lblStatus.Text = $"Загрузка свечей: {symbol}, {interval}...";
@@ -201,7 +225,9 @@ namespace BinanceFuturesViewer
 
                 lock (candlesLock)
                 {
-                    candles = loadedCandles;
+                    candles = loadedCandles
+                        .OrderBy(x => x.OpenTimeMs)
+                        .ToList();
                 }
 
                 DrawCandles(symbol, interval);
@@ -218,7 +244,7 @@ namespace BinanceFuturesViewer
             }
         }
 
-        private void WebSocketService_CandleReceived(BinanceCandle incoming)
+        private async void WebSocketService_CandleReceived(BinanceCandle incoming)
         {
             if (InvokeRequired)
             {
@@ -226,8 +252,17 @@ namespace BinanceFuturesViewer
                 return;
             }
 
+            if (isLoadingChart || isResyncInProgress)
+                return;
+
+            bool needResync = false;
+
             lock (candlesLock)
             {
+                candles = candles
+                    .OrderBy(c => c.OpenTimeMs)
+                    .ToList();
+
                 int existingIndex = candles.FindIndex(c => c.OpenTimeMs == incoming.OpenTimeMs);
 
                 if (existingIndex >= 0)
@@ -236,19 +271,63 @@ namespace BinanceFuturesViewer
                 }
                 else
                 {
-                    candles.Add(incoming);
+                    if (candles.Count == 0)
+                    {
+                        candles.Add(incoming);
+                    }
+                    else
+                    {
+                        var lastCandle = candles[candles.Count - 1];
 
-                    var orderedCandles = candles
-                        .OrderBy(c => c.OpenTimeMs)
-                        .ToList();
+                        bool isNextCandle =
+                            incoming.OpenTimeMs == lastCandle.CloseTimeMs + 1;
 
-                    candles = orderedCandles
-                        .Skip(Math.Max(0, orderedCandles.Count - Properties.Settings.Default.DefaultCandlesLimit))
-                        .ToList();
+                        if (!isNextCandle)
+                        {
+                            needResync = true;
+                        }
+                        else if (!lastCandle.IsClosed)
+                        {
+                            needResync = true;
+                        }
+                        else
+                        {
+                            candles.Add(incoming);
+
+                            candles = candles
+                                .OrderBy(c => c.OpenTimeMs)
+                                .Skip(Math.Max(0, candles.Count - Properties.Settings.Default.DefaultCandlesLimit))
+                                .ToList();
+                        }
+                    }
                 }
             }
 
+            if (needResync)
+            {
+                await ResyncSelectedSymbolAsync("Обнаружено нарушение последовательности свечей, выполняется синхронизация...");
+                return;
+            }
+
             DrawCandles(GetSelectedSymbolCode(), GetSelectedInterval());
+        }
+
+        private async Task ResyncSelectedSymbolAsync(string statusMessage)
+        {
+            if (isResyncInProgress)
+                return;
+
+            try
+            {
+                isResyncInProgress = true;
+                lblStatus.Text = statusMessage;
+
+                await ReloadChartAndStreamAsync();
+            }
+            finally
+            {
+                isResyncInProgress = false;
+            }
         }
 
         private void WebSocketService_StatusChanged(string message)
@@ -279,7 +358,9 @@ namespace BinanceFuturesViewer
 
             lock (candlesLock)
             {
-                snapshot = candles.OrderBy(c => c.OpenTimeMs).ToList();
+                snapshot = candles
+                    .OrderBy(c => c.OpenTimeMs)
+                    .ToList();
             }
 
             var series = chartCandles.Series[BinanceConstants.CandleSeriesName];
@@ -302,7 +383,6 @@ namespace BinanceFuturesViewer
             }
 
             chartCandles.ChartAreas[BinanceConstants.ChartAreaName].RecalculateAxesScale();
-
             chartCandles.Titles.Clear();
             chartCandles.Titles.Add($"{symbol} - {interval} - последние {snapshot.Count} свечей");
             chartCandles.Titles[0].ForeColor = Color.White;

@@ -48,7 +48,9 @@ namespace BinanceFuturesViewer.Services
                 Open = decimal.Parse(item[1].ToString(), CultureInfo.InvariantCulture),
                 High = decimal.Parse(item[2].ToString(), CultureInfo.InvariantCulture),
                 Low = decimal.Parse(item[3].ToString(), CultureInfo.InvariantCulture),
-                Close = decimal.Parse(item[4].ToString(), CultureInfo.InvariantCulture)
+                Close = decimal.Parse(item[4].ToString(), CultureInfo.InvariantCulture),
+                CloseTimeMs = Convert.ToInt64(item[6]),
+                IsClosed = true
             }).ToList();
         }
     }

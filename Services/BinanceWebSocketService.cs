@@ -39,11 +39,13 @@ namespace BinanceFuturesViewer.Services
                     var candle = new BinanceCandle
                     {
                         OpenTimeMs = message.Kline.OpenTime,
+                        CloseTimeMs = message.Kline.CloseTime,
                         OpenTime = DateTimeOffset.FromUnixTimeMilliseconds(message.Kline.OpenTime).LocalDateTime,
                         Open = decimal.Parse(message.Kline.Open, CultureInfo.InvariantCulture),
                         High = decimal.Parse(message.Kline.High, CultureInfo.InvariantCulture),
                         Low = decimal.Parse(message.Kline.Low, CultureInfo.InvariantCulture),
-                        Close = decimal.Parse(message.Kline.Close, CultureInfo.InvariantCulture)
+                        Close = decimal.Parse(message.Kline.Close, CultureInfo.InvariantCulture),
+                        IsClosed = message.Kline.IsClosed
                     };
 
                     CandleReceived?.Invoke(candle);

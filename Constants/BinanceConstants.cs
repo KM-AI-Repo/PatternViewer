@@ -14,5 +14,11 @@ namespace BinanceFuturesViewer.Constants
 
         public const string ChartAreaName = "MainArea";
         public const string CandleSeriesName = "Candles";
+
+        public static readonly string[] ForcedSymbols =
+        {
+            "BTCUSDT",
+            "ETHUSDT"
+        };
     }
 }
