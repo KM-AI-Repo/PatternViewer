@@ -15,6 +15,8 @@ namespace BinanceFuturesViewer.Constants
         public const string ChartAreaName = "MainArea";
         public const string CandleSeriesName = "Candles";
 
+        public static readonly TimeSpan StartCooldown = TimeSpan.FromMinutes(1);
+
         public static readonly string[] ForcedSymbols =
         {
             "BTCUSDT",

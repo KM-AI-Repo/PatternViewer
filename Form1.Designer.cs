@@ -33,9 +33,10 @@
             System.Windows.Forms.DataVisualization.Charting.Series series2 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.listBoxSymbols = new System.Windows.Forms.ListBox();
             this.comboBoxInterval = new System.Windows.Forms.ComboBox();
-            this.btnReloadSymbols = new System.Windows.Forms.Button();
             this.chartCandles = new System.Windows.Forms.DataVisualization.Charting.Chart();
             this.lblStatus = new System.Windows.Forms.Label();
+            this.btnStart = new System.Windows.Forms.Button();
+            this.btnStop = new System.Windows.Forms.Button();
             ((System.ComponentModel.ISupportInitialize)(this.chartCandles)).BeginInit();
             this.SuspendLayout();
             // 
@@ -46,7 +47,7 @@
             this.listBoxSymbols.Location = new System.Drawing.Point(12, 44);
             this.listBoxSymbols.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.listBoxSymbols.Name = "listBoxSymbols";
-            this.listBoxSymbols.Size = new System.Drawing.Size(237, 916);
+            this.listBoxSymbols.Size = new System.Drawing.Size(237, 932);
             this.listBoxSymbols.TabIndex = 0;
             // 
             // comboBoxInterval
@@ -58,51 +59,60 @@
             this.comboBoxInterval.Size = new System.Drawing.Size(121, 24);
             this.comboBoxInterval.TabIndex = 1;
             // 
-            // btnReloadSymbols
-            // 
-            this.btnReloadSymbols.Location = new System.Drawing.Point(140, 10);
-            this.btnReloadSymbols.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
-            this.btnReloadSymbols.Name = "btnReloadSymbols";
-            this.btnReloadSymbols.Size = new System.Drawing.Size(151, 26);
-            this.btnReloadSymbols.TabIndex = 2;
-            this.btnReloadSymbols.Text = "Reload Symbols";
-            this.btnReloadSymbols.UseVisualStyleBackColor = true;
-            // 
             // chartCandles
             // 
             chartArea2.Name = "ChartArea1";
             this.chartCandles.ChartAreas.Add(chartArea2);
             legend2.Name = "Legend1";
             this.chartCandles.Legends.Add(legend2);
-            this.chartCandles.Location = new System.Drawing.Point(256, 42);
+            this.chartCandles.Location = new System.Drawing.Point(256, 44);
             this.chartCandles.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
             this.chartCandles.Name = "chartCandles";
             series2.ChartArea = "ChartArea1";
             series2.Legend = "Legend1";
             series2.Name = "Series1";
             this.chartCandles.Series.Add(series2);
-            this.chartCandles.Size = new System.Drawing.Size(1508, 930);
+            this.chartCandles.Size = new System.Drawing.Size(1508, 932);
             this.chartCandles.TabIndex = 4;
             this.chartCandles.Text = "chart1";
             // 
             // lblStatus
             // 
             this.lblStatus.AutoSize = true;
-            this.lblStatus.Location = new System.Drawing.Point(297, 14);
+            this.lblStatus.Location = new System.Drawing.Point(302, 13);
             this.lblStatus.Margin = new System.Windows.Forms.Padding(4, 0, 4, 0);
             this.lblStatus.Name = "lblStatus";
             this.lblStatus.Size = new System.Drawing.Size(44, 16);
             this.lblStatus.TabIndex = 5;
             this.lblStatus.Text = "Status";
             // 
+            // btnStart
+            // 
+            this.btnStart.Location = new System.Drawing.Point(139, 8);
+            this.btnStart.Name = "btnStart";
+            this.btnStart.Size = new System.Drawing.Size(75, 26);
+            this.btnStart.TabIndex = 6;
+            this.btnStart.Text = "Start";
+            this.btnStart.UseVisualStyleBackColor = true;
+            // 
+            // btnStop
+            // 
+            this.btnStop.Location = new System.Drawing.Point(220, 8);
+            this.btnStop.Name = "btnStop";
+            this.btnStop.Size = new System.Drawing.Size(75, 26);
+            this.btnStop.TabIndex = 7;
+            this.btnStop.Text = "Stop";
+            this.btnStop.UseVisualStyleBackColor = true;
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(8F, 16F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.ClientSize = new System.Drawing.Size(1779, 986);
+            this.ClientSize = new System.Drawing.Size(1779, 991);
+            this.Controls.Add(this.btnStop);
+            this.Controls.Add(this.btnStart);
             this.Controls.Add(this.lblStatus);
             this.Controls.Add(this.chartCandles);
-            this.Controls.Add(this.btnReloadSymbols);
             this.Controls.Add(this.comboBoxInterval);
             this.Controls.Add(this.listBoxSymbols);
             this.Margin = new System.Windows.Forms.Padding(3, 2, 3, 2);
@@ -118,9 +128,10 @@
 
         private System.Windows.Forms.ListBox listBoxSymbols;
         private System.Windows.Forms.ComboBox comboBoxInterval;
-        private System.Windows.Forms.Button btnReloadSymbols;
         private System.Windows.Forms.DataVisualization.Charting.Chart chartCandles;
         private System.Windows.Forms.Label lblStatus;
+        private System.Windows.Forms.Button btnStart;
+        private System.Windows.Forms.Button btnStop;
     }
 }
 
