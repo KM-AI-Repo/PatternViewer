@@ -127,7 +127,7 @@ namespace BinanceFuturesViewer
                 Properties.Settings.Default.Save();
             }
 
-            await LoadSymbolsAsync();
+            await ReloadChartAndStreamAsync();
         }
 
         private async void ListBoxSymbols_SelectedIndexChanged(object sender, EventArgs e)
