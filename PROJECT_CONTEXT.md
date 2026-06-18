@@ -24,20 +24,58 @@ It exists to preserve architectural decisions, prevent repeated debates, and kee
 ## Functional goal
 The application is a desktop viewer for Binance USDT-margined perpetual futures.
 
-The current direction is not to show the full market by default.
-The application is moving toward filtered symbol display based on candle analysis, while still allowing chart viewing and real-time updates for selected instruments.
+The project is moving toward filtered symbol display based on candle analysis and future pattern detection.
+The long-term goal is to show the user only symbols that currently match selected market patterns, while still allowing chart viewing for the selected instrument.
 
 Current implemented behavior:
 - load active USDT perpetual futures from Binance
-- preload market candle data for the current interval
+- preload market candle data for the selected interval
 - keep a local in-memory candle cache by symbol
-- always show forced symbols even if no filter matches
+- always include forced symbols in the display list
 - allow single-symbol selection
-- allow interval selection
+- allow interval selection while the program is stopped
 - persist the last selected interval in user settings
 - load the selected chart through REST
 - update the selected chart through WebSocket
 - resync the selected chart if candle continuity is broken
+- require explicit Start before any market loading begins
+- allow explicit Stop to terminate active runtime connections
+- rate-limit repeated Start actions with a fixed cooldown
+
+## Runtime model
+The application now has explicit idle and running states.
+
+### Idle state
+When the form opens:
+- no market data is loaded automatically
+- no chart data is loaded automatically
+- no WebSocket connection is opened automatically
+- interval selection is allowed
+- Start is available
+- Stop is disabled
+
+### Running state
+After Start:
+- market data is loaded
+- display symbols are rebuilt from market cache
+- selected symbol chart data is loaded through REST
+- selected symbol WebSocket is connected
+- interval selection is disabled
+- Start is disabled
+- Stop is enabled
+
+### Busy state
+During market loading, chart loading, or selected-symbol resync:
+- both Start and Stop are disabled
+- interval selection is disabled
+- the user cannot interrupt loading
+
+### Stop behavior
+When Stop is pressed:
+- active real-time selected-symbol WebSocket connection is disconnected
+- the form returns to idle state
+- market loading does not continue automatically
+- interval selection becomes available again
 
 ## Current architecture
 The current architecture is intentional and should be treated as the baseline.
@@ -51,8 +89,8 @@ Form responsibilities:
 - initialize controls
 - initialize supported intervals
 - initialize chart styling
-- trigger market loading
-- reload symbols when interval changes
+- maintain explicit idle/running UI state
+- trigger market loading only from Start
 - keep the current selected-symbol candle list in memory
 - draw and update the chart
 - coordinate REST and WebSocket services
@@ -69,7 +107,7 @@ Responsibilities:
 
 #### BinanceWebSocketService
 Responsibilities:
-- connect to Binance kline WebSocket streams
+- connect to Binance kline WebSocket streams for the currently selected symbol
 - deserialize incoming kline updates
 - convert payloads into BinanceCandle
 - notify UI through events
@@ -101,6 +139,7 @@ Examples:
 - chart area and series names
 - forced symbols
 - fixed Binance interval list
+- Start cooldown
 
 ### Settings
 Properties.Settings is used only for mutable values that may later be edited through a settings form.
@@ -129,7 +168,36 @@ If needed, keep them in a dedicated immutable helper or static readonly collecti
 
 ## Interval persistence policy
 The selected interval is user state.
-When the user changes the interval, it should become the new default interval in Properties.Settings and persist between launches.
+When the user changes the interval while the program is stopped, the new interval becomes the new default interval in Properties.Settings and persists between launches.
+
+Changing the interval while stopped must not:
+- trigger market loading
+- trigger chart loading
+- trigger chart redraw logic beyond normal initialization needs
+- open or reopen network connections
+
+The interval in idle state is preparation for the next Start, not a trigger for immediate work.
+
+## Start/Stop policy
+Program execution is controlled explicitly through Start and Stop buttons.
+
+Rules:
+- the application must not auto-start loading on form open
+- Start is the only allowed entry point for full market loading
+- Stop is the normal way to end runtime activity
+- manual reload buttons for market bootstrap are intentionally removed
+- Start actions are rate-limited to reduce accidental API overuse
+
+## Start cooldown policy
+Repeated Start actions must be limited by a fixed cooldown window.
+
+Current rule:
+- cooldown is an immutable technical value stored in constants
+- the current implementation uses `BinanceConstants.StartCooldown`
+- the guard is checked when Start is clicked
+- if cooldown has not expired, the program does not start and instead shows the remaining wait time in the status label
+
+This cooldown exists specifically to reduce the risk of repeatedly reloading historical data and exceeding API limits.
 
 ## Market universe policy
 The active futures universe is dynamic.
@@ -229,14 +297,26 @@ After rebinding `ListBox.DataSource`, always reassign:
 
 Also keep `BinanceSymbol.ToString()` returning `Symbol` as a defensive fallback.
 
-### 8. Real-time reload flow
-When symbol or interval changes:
-1. disconnect current WebSocket
+### 8. Selected-symbol real-time reload flow
+When the selected symbol changes, or when selected-symbol resync is required:
+1. disconnect current selected-symbol WebSocket
 2. reload selected-symbol candles through REST
 3. redraw chart
-4. connect a new WebSocket stream
+4. connect a new selected-symbol WebSocket stream
 
 This behavior is intentional and should be preserved unless explicitly redesigned.
+
+### 9. Chart initialization order matters
+Chart initialization must happen before any code path that could trigger chart drawing from interval selection or startup initialization.
+
+In the current UI lifecycle:
+- `InitializeChart()` should happen before `InitializeIntervals()`
+
+This prevents startup errors caused by interval selection events firing before chart setup is complete.
+
+### 10. Interval change in idle state is non-operative
+When the application is stopped, changing the interval should only persist the new default interval.
+It should not initiate loading or runtime behavior.
 
 ## Decisions that are already settled
 Do not reopen these without an explicit request.
@@ -251,6 +331,8 @@ Do not reopen these without an explicit request.
 - MarketCacheService is a valid part of the architecture and should not be treated as temporary clutter.
 - Forced symbols are a product rule, not a hack.
 - Showing only forced symbols at the current stage is acceptable while screening logic is still being built.
+- Manual symbol reload button is intentionally removed.
+- Start cooldown belongs to immutable technical constants, not user settings.
 
 ## Guidance for future suggestions
 When proposing changes:
@@ -283,23 +365,27 @@ Weak reasons:
 ## Expected next directions
 Likely future work includes:
 - implementing real filter logic in `MatchesFilter(...)`
+- real-time updates for market-wide latest candles
 - pattern detection logic
 - candle analysis helpers
 - expanding market cache behavior
+- a dedicated market-wide WebSocket service
 - chart behavior improvements
 - a settings form
 - additional services built on top of the existing baseline
 
 Future work should preserve the already working behavior:
+- explicit Start/Stop runtime control
 - market bootstrap
 - forced symbol inclusion
-- interval selection
+- interval selection in idle state only
 - interval persistence
 - symbol display through MarketCacheService
 - selected-symbol REST loading
-- WebSocket real-time updates
+- selected-symbol WebSocket real-time updates
 - candle continuity checks
 - selected-symbol resync behavior
+- Start cooldown protection
 
 ## Preferred collaboration style
 For future assistance, use this operating style:
