@@ -156,15 +156,15 @@ namespace BinanceFuturesViewer.Services
             }
         }
 
-        public void UpdateCandle(string symbol, BinanceCandle incoming, int candleLimit)
+        public MarketCandleUpdateResult UpdateCandle(string symbol, BinanceCandle incoming, int candleLimit)
         {
             if (string.IsNullOrWhiteSpace(symbol) || incoming == null)
-                return;
+                return MarketCandleUpdateResult.Ignored;
 
             lock (syncRoot)
             {
                 if (!candlesBySymbol.TryGetValue(symbol, out var candles))
-                    return;
+                    return MarketCandleUpdateResult.Ignored;
 
                 candles = candles
                     .OrderBy(x => x.OpenTimeMs)
@@ -175,26 +175,28 @@ namespace BinanceFuturesViewer.Services
                 if (existingIndex >= 0)
                 {
                     candles[existingIndex] = incoming;
+                    candlesBySymbol[symbol] = candles;
+                    return MarketCandleUpdateResult.UpdatedExisting;
                 }
-                else
+
+                if (candles.Count == 0)
                 {
-                    if (candles.Count == 0)
-                    {
-                        candles.Add(incoming);
-                    }
-                    else
-                    {
-                        var last = candles[candles.Count - 1];
-                        bool isNext = incoming.OpenTimeMs == last.CloseTimeMs + 1;
-
-                        if (!isNext)
-                        {
-                            return;
-                        }
-
-                        candles.Add(incoming);
-                    }
+                    candles.Add(incoming);
+                    candlesBySymbol[symbol] = candles;
+                    return MarketCandleUpdateResult.Appended;
                 }
+
+                var last = candles[candles.Count - 1];
+
+                bool isNext = incoming.OpenTimeMs == last.CloseTimeMs + 1;
+                bool previousClosed = last.IsClosed;
+
+                if (!isNext || !previousClosed)
+                {
+                    return MarketCandleUpdateResult.ResyncRequired;
+                }
+
+                candles.Add(incoming);
 
                 candles = candles
                     .OrderBy(x => x.OpenTimeMs)
@@ -202,6 +204,7 @@ namespace BinanceFuturesViewer.Services
                     .ToList();
 
                 candlesBySymbol[symbol] = candles;
+                return MarketCandleUpdateResult.Appended;
             }
         }
 
@@ -215,6 +218,26 @@ namespace BinanceFuturesViewer.Services
                 candlesBySymbol[symbol] = candles
                     .OrderBy(x => x.OpenTimeMs)
                     .ToList();
+            }
+        }
+
+        public async Task<bool> TryResyncSymbolAsync(string symbol, string interval, int candleLimit)
+        {
+            if (string.IsNullOrWhiteSpace(symbol) || string.IsNullOrWhiteSpace(interval))
+                return false;
+
+            if (!HasSymbol(symbol))
+                return false;
+
+            try
+            {
+                var candles = await restService.GetKlinesAsync(symbol, interval, candleLimit);
+                ReplaceSymbolCandles(symbol, candles);
+                return true;
+            }
+            catch
+            {
+                return false;
             }
         }
     }

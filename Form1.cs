@@ -29,6 +29,8 @@ namespace BinanceFuturesViewer
         
         private DateTime? lastStartUtc;
 
+        private readonly HashSet<string> marketResyncInProgress = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         public Form1()
         {
             InitializeComponent();
@@ -527,10 +529,15 @@ namespace BinanceFuturesViewer
             if (!isRunning)
                 return;
 
-            marketCacheService.UpdateCandle(
+            var result = marketCacheService.UpdateCandle(
                 symbol,
                 incoming,
                 Properties.Settings.Default.DefaultCandlesLimit);
+
+            if (result == MarketCandleUpdateResult.ResyncRequired)
+            {
+                _ = ResyncMarketSymbolAsync(symbol);
+            }
 
             //var currentSelectedSymbol = GetSelectedSymbolCode();
             //if (string.Equals(currentSelectedSymbol, symbol, StringComparison.OrdinalIgnoreCase))
@@ -604,6 +611,40 @@ namespace BinanceFuturesViewer
             }
 
             lblStatus.Text = "Ошибка Market WebSocket: " + message;
+        }
+
+        private async Task ResyncMarketSymbolAsync(string symbol)
+        {
+            if (string.IsNullOrWhiteSpace(symbol) || !isRunning)
+                return;
+
+            lock (marketResyncInProgress)
+            {
+                if (marketResyncInProgress.Contains(symbol))
+                    return;
+
+                marketResyncInProgress.Add(symbol);
+            }
+
+            try
+            {
+                bool success = await marketCacheService.TryResyncSymbolAsync(
+                    symbol,
+                    GetSelectedInterval(),
+                    Properties.Settings.Default.DefaultCandlesLimit);
+
+                if (!success)
+                {
+                    lblStatus.Text = $"Не удалось пересинхронизировать market cache для {symbol}";
+                }
+            }
+            finally
+            {
+                lock (marketResyncInProgress)
+                {
+                    marketResyncInProgress.Remove(symbol);
+                }
+            }
         }
     }
 }

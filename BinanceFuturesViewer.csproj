@@ -69,6 +69,7 @@
     <Compile Include="Models\BinanceKlineData.cs" />
     <Compile Include="Models\BinanceKlineStreamMessage.cs" />
     <Compile Include="Models\BinanceSymbol.cs" />
+    <Compile Include="Models\MarketCandleUpdateResult.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
     <Compile Include="Services\BinanceRestService.cs" />
