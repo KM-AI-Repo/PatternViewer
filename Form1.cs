@@ -26,7 +26,10 @@ namespace BinanceFuturesViewer
         private bool isLoadingChart;
         private bool isResyncInProgress;
         private bool isRunning;
-        
+        private bool suppressSymbolSelectionChanged;
+
+        private string currentChartSymbol;
+
         private DateTime? lastStartUtc;
 
         private readonly HashSet<string> marketResyncInProgress = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -211,10 +214,21 @@ namespace BinanceFuturesViewer
 
         private async void ListBoxSymbols_SelectedIndexChanged(object sender, EventArgs e)
         {
+            if (suppressSymbolSelectionChanged)
+                return;
+
             if (!isRunning || isUpdatingUi || isLoadingChart || isResyncInProgress)
                 return;
 
             if (listBoxSymbols.SelectedIndex < 0)
+                return;
+
+            string selectedSymbol = GetSelectedSymbolCode();
+
+            if (string.IsNullOrWhiteSpace(selectedSymbol))
+                return;
+
+            if (string.Equals(currentChartSymbol, selectedSymbol, StringComparison.OrdinalIgnoreCase))
                 return;
 
             await ReloadChartAndStreamAsync();
@@ -277,10 +291,22 @@ namespace BinanceFuturesViewer
                         }
                     }
 
-                    if (selected != null)
-                        listBoxSymbols.SelectedItem = selected;
-                    else
-                        listBoxSymbols.SelectedIndex = 0;
+                    suppressSymbolSelectionChanged = true;
+
+                    try
+                    {
+                        if (selected != null)
+                            listBoxSymbols.SelectedItem = selected;
+                        else if (listBoxSymbols.Items.Count > 0)
+                            listBoxSymbols.SelectedIndex = 0;
+                    }
+                    finally
+                    {
+                        suppressSymbolSelectionChanged = false;
+                    }
+
+                    if (isRunning && listBoxSymbols.SelectedIndex >= 0)
+                        await ReloadChartAndStreamAsync();
                 }
                 else
                 {
@@ -345,6 +371,7 @@ namespace BinanceFuturesViewer
 
                 DrawCandles(symbol, interval);
                 webSocketService.Connect(symbol, interval);
+                currentChartSymbol = symbol;
             }
             catch (Exception ex)
             {
@@ -478,9 +505,8 @@ namespace BinanceFuturesViewer
 
             foreach (var candle in snapshot)
             {
-                int pointIndex = series.Points.AddXY(candle.OpenTime, candle.High);
-                var point = series.Points[pointIndex];
-
+                var point = new DataPoint();
+                point.XValue = candle.OpenTime.ToOADate();
                 point.YValues = new[]
                 {
                     (double)candle.High,
@@ -488,12 +514,14 @@ namespace BinanceFuturesViewer
                     (double)candle.Open,
                     (double)candle.Close
                 };
-
                 point.Color = candle.Close >= candle.Open ? Color.LimeGreen : Color.Red;
+
+                series.Points.Add(point);
             }
 
             chartCandles.ChartAreas[BinanceConstants.ChartAreaName].RecalculateAxesScale();
 
+            chartCandles.Invalidate();
             chartCandles.Titles.Clear();
             chartCandles.Titles.Add($"{symbol} - {interval} - последние {snapshot.Count} свечей");
             chartCandles.Titles[0].ForeColor = Color.White;
@@ -742,9 +770,28 @@ namespace BinanceFuturesViewer
                 .Cast<BinanceSymbol>()
                 .FirstOrDefault(x => x.Symbol.Equals(symbolCode, StringComparison.OrdinalIgnoreCase));
 
-            if (item != null)
+            if (item == null)
+                return;
+
+            if (ReferenceEquals(listBoxSymbols.SelectedItem, item))
+                return;
+
+            var currentlySelected = listBoxSymbols.SelectedItem as BinanceSymbol;
+            if (currentlySelected != null &&
+                currentlySelected.Symbol.Equals(item.Symbol, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            suppressSymbolSelectionChanged = true;
+
+            try
             {
                 listBoxSymbols.SelectedItem = item;
+            }
+            finally
+            {
+                suppressSymbolSelectionChanged = false;
             }
         }
 
