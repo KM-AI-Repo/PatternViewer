@@ -134,9 +134,14 @@ namespace BinanceFuturesViewer.Services
 
         private bool MatchesFilter(BinanceSymbol symbol, List<BinanceCandle> candles)
         {
-            // Заглушка до следующей итерации.
-            // Сейчас показываем только forced symbols.
-            return false;
+            if (candles == null || candles.Count == 0)
+                return false;
+
+            var lastCandle = candles
+                .OrderBy(x => x.OpenTimeMs)
+                .Last();
+
+            return lastCandle.Close > lastCandle.Open;
         }
 
         private class SymbolCandlesLoadResult
@@ -238,6 +243,51 @@ namespace BinanceFuturesViewer.Services
             catch
             {
                 return false;
+            }
+        }
+
+        public bool ShouldDisplaySymbol(string symbol)
+        {
+            if (string.IsNullOrWhiteSpace(symbol))
+                return false;
+
+            List<BinanceCandle> candles;
+            BinanceSymbol symbolModel;
+
+            lock (syncRoot)
+            {
+                symbolModel = activeSymbols.FirstOrDefault(x =>
+                    x.Symbol.Equals(symbol, StringComparison.OrdinalIgnoreCase));
+
+                if (symbolModel == null)
+                    return false;
+
+                if (BinanceConstants.ForcedSymbols.Any(x =>
+                    x.Equals(symbol, StringComparison.OrdinalIgnoreCase)))
+                {
+                    return true;
+                }
+
+                if (!candlesBySymbol.TryGetValue(symbol, out candles))
+                    return false;
+
+                candles = candles
+                    .OrderBy(x => x.OpenTimeMs)
+                    .ToList();
+            }
+
+            return MatchesFilter(symbolModel, candles);
+        }
+
+        public BinanceSymbol GetSymbolByCode(string symbol)
+        {
+            if (string.IsNullOrWhiteSpace(symbol))
+                return null;
+
+            lock (syncRoot)
+            {
+                return activeSymbols.FirstOrDefault(x =>
+                    x.Symbol.Equals(symbol, StringComparison.OrdinalIgnoreCase));
             }
         }
     }

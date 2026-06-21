@@ -53,8 +53,6 @@ namespace BinanceFuturesViewer
             marketWebSocketService.ErrorOccurred += MarketWebSocketService_ErrorOccurred;
 
             listBoxSymbols.SelectionMode = SelectionMode.One;
-            listBoxSymbols.DisplayMember = nameof(BinanceSymbol.Symbol);
-            listBoxSymbols.ValueMember = nameof(BinanceSymbol.Symbol);
 
             comboBoxInterval.DropDownStyle = ComboBoxStyle.DropDownList;
         }
@@ -247,21 +245,24 @@ namespace BinanceFuturesViewer
                 string previouslySelectedSymbol = GetSelectedSymbolCode();
 
                 listBoxSymbols.BeginUpdate();
-                listBoxSymbols.DataSource = null;
                 listBoxSymbols.Items.Clear();
-                listBoxSymbols.DataSource = symbols;
-                listBoxSymbols.DisplayMember = nameof(BinanceSymbol.Symbol);
-                listBoxSymbols.ValueMember = nameof(BinanceSymbol.Symbol);
+
+                foreach (var symbol in symbols.OrderBy(x => x.Symbol))
+                {
+                    listBoxSymbols.Items.Add(symbol);
+                }
+
                 listBoxSymbols.EndUpdate();
 
-                if (symbols.Count > 0)
+                if (listBoxSymbols.Items.Count > 0)
                 {
                     BinanceSymbol selected = null;
 
                     if (!string.IsNullOrWhiteSpace(previouslySelectedSymbol))
                     {
-                        selected = symbols.FirstOrDefault(x =>
-                            x.Symbol.Equals(previouslySelectedSymbol, StringComparison.OrdinalIgnoreCase));
+                        selected = listBoxSymbols.Items
+                            .Cast<BinanceSymbol>()
+                            .FirstOrDefault(x => x.Symbol.Equals(previouslySelectedSymbol, StringComparison.OrdinalIgnoreCase));
                     }
 
                     if (selected == null)
@@ -270,8 +271,9 @@ namespace BinanceFuturesViewer
 
                         if (!string.IsNullOrWhiteSpace(defaultSymbol))
                         {
-                            selected = symbols.FirstOrDefault(x =>
-                                x.Symbol.Equals(defaultSymbol, StringComparison.OrdinalIgnoreCase));
+                            selected = listBoxSymbols.Items
+                                .Cast<BinanceSymbol>()
+                                .FirstOrDefault(x => x.Symbol.Equals(defaultSymbol, StringComparison.OrdinalIgnoreCase));
                         }
                     }
 
@@ -420,7 +422,7 @@ namespace BinanceFuturesViewer
                 return;
             }
 
-            DrawCandles(GetSelectedSymbolCode(), GetSelectedInterval());
+            DrawCandles(GetChartTitleSymbol(), GetSelectedInterval());
         }
 
         private async Task ResyncSelectedSymbolAsync(string statusMessage)
@@ -510,7 +512,8 @@ namespace BinanceFuturesViewer
 
         public string GetSelectedSymbolCode()
         {
-            return (listBoxSymbols.SelectedItem as BinanceSymbol)?.Symbol;
+            var selected = listBoxSymbols.SelectedItem as BinanceSymbol;
+            return selected?.Symbol;
         }
 
         public string GetSelectedInterval()
@@ -537,17 +540,15 @@ namespace BinanceFuturesViewer
             if (result == MarketCandleUpdateResult.ResyncRequired)
             {
                 _ = ResyncMarketSymbolAsync(symbol);
+                return;
             }
 
-            //var currentSelectedSymbol = GetSelectedSymbolCode();
-            //if (string.Equals(currentSelectedSymbol, symbol, StringComparison.OrdinalIgnoreCase))
-            //{
-            //    return;
-            //}
-
-            //RefreshSymbolsListPreserveSelection();
+            UpdateSingleSymbolVisibility(symbol);
         }
 
+        // Legacy full-rebuild approach.
+        // Intentionally not used in realtime symbol updates because it caused unstable selection
+        // and STOP button flicker.
         private void RefreshSymbolsListPreserveSelection()
         {
             if (isUpdatingUi || isLoadingChart || isResyncInProgress)
@@ -645,6 +646,117 @@ namespace BinanceFuturesViewer
                     marketResyncInProgress.Remove(symbol);
                 }
             }
+        }
+
+        private BinanceSymbol FindSymbolInListBox(string symbol)
+        {
+            if (string.IsNullOrWhiteSpace(symbol))
+                return null;
+
+            return listBoxSymbols.Items
+                .Cast<BinanceSymbol>()
+                .FirstOrDefault(x => x.Symbol.Equals(symbol, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private void AddSymbolToListBox(BinanceSymbol symbol)
+        {
+            if (symbol == null)
+                return;
+
+            if (FindSymbolInListBox(symbol.Symbol) != null)
+                return;
+
+            string selectedSymbolCode = GetSelectedSymbolCode();
+
+            listBoxSymbols.BeginUpdate();
+
+            try
+            {
+                var items = listBoxSymbols.Items
+                    .Cast<BinanceSymbol>()
+                    .ToList();
+
+                items.Add(symbol);
+
+                var ordered = items
+                    .OrderBy(x => x.Symbol)
+                    .ToList();
+
+                listBoxSymbols.Items.Clear();
+
+                foreach (var item in ordered)
+                {
+                    listBoxSymbols.Items.Add(item);
+                }
+            }
+            finally
+            {
+                listBoxSymbols.EndUpdate();
+            }
+
+            RestoreSelectedSymbol(selectedSymbolCode);
+        }
+
+        private void RemoveSymbolFromListBox(string symbol)
+        {
+            if (string.IsNullOrWhiteSpace(symbol))
+                return;
+
+            string selectedSymbolCode = GetSelectedSymbolCode();
+
+            if (string.Equals(selectedSymbolCode, symbol, StringComparison.OrdinalIgnoreCase))
+                return;
+
+            var existing = FindSymbolInListBox(symbol);
+            if (existing == null)
+                return;
+
+            listBoxSymbols.Items.Remove(existing);
+
+            RestoreSelectedSymbol(selectedSymbolCode);
+        }
+
+        private void UpdateSingleSymbolVisibility(string symbol)
+        {
+            if (string.IsNullOrWhiteSpace(symbol) || !isRunning)
+                return;
+
+            bool shouldDisplay = marketCacheService.ShouldDisplaySymbol(symbol);
+            var existing = FindSymbolInListBox(symbol);
+
+            if (shouldDisplay)
+            {
+                if (existing == null)
+                {
+                    var symbolModel = marketCacheService.GetSymbolByCode(symbol);
+                    AddSymbolToListBox(symbolModel);
+                }
+            }
+            else
+            {
+                RemoveSymbolFromListBox(symbol);
+            }
+        }
+
+        private void RestoreSelectedSymbol(string symbolCode)
+        {
+            if (string.IsNullOrWhiteSpace(symbolCode))
+                return;
+
+            var item = listBoxSymbols.Items
+                .Cast<BinanceSymbol>()
+                .FirstOrDefault(x => x.Symbol.Equals(symbolCode, StringComparison.OrdinalIgnoreCase));
+
+            if (item != null)
+            {
+                listBoxSymbols.SelectedItem = item;
+            }
+        }
+
+        private string GetChartTitleSymbol()
+        {
+            var selected = GetSelectedSymbolCode();
+            return string.IsNullOrWhiteSpace(selected) ? "-" : selected;
         }
     }
 }
