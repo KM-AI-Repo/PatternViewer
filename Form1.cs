@@ -137,10 +137,10 @@ namespace BinanceFuturesViewer
             bool isBusy = isUpdatingUi || isLoadingChart || isResyncInProgress;
 
             btnStart.Enabled = !isBusy && !isRunning;
-            btnStop.Enabled = !isBusy && isRunning;
+            btnStop.Enabled = isRunning;
 
             comboBoxInterval.Enabled = !isBusy && !isRunning;
-            listBoxSymbols.Enabled = !isBusy && isRunning;
+            listBoxSymbols.Enabled = isRunning || isLoadingChart;
         }
 
         private async void BtnStart_Click(object sender, EventArgs e)
@@ -182,7 +182,7 @@ namespace BinanceFuturesViewer
 
         private void BtnStop_Click(object sender, EventArgs e)
         {
-            if (!isRunning || isUpdatingUi || isLoadingChart || isResyncInProgress)
+            if (!isRunning)
                 return;
 
             marketWebSocketService.Disconnect();
@@ -399,14 +399,9 @@ namespace BinanceFuturesViewer
                         {
                             needResync = true;
                         }
-                        else if (!lastCandle.IsClosed)
-                        {
-                            needResync = true;
-                        }
                         else
                         {
                             candles.Add(incoming);
-
                             candles = candles
                                 .OrderBy(c => c.OpenTimeMs)
                                 .Skip(Math.Max(0, candles.Count - Properties.Settings.Default.DefaultCandlesLimit))
