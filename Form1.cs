@@ -304,9 +304,6 @@ namespace BinanceFuturesViewer
                     {
                         suppressSymbolSelectionChanged = false;
                     }
-
-                    if (isRunning && listBoxSymbols.SelectedIndex >= 0)
-                        await ReloadChartAndStreamAsync();
                 }
                 else
                 {
@@ -333,7 +330,7 @@ namespace BinanceFuturesViewer
                 UpdateControlsState();
             }
 
-            if (isRunning)
+            if (isRunning && listBoxSymbols.SelectedIndex >= 0)
                 await ReloadChartAndStreamAsync();
         }
 

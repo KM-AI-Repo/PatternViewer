@@ -2,7 +2,7 @@
 
 ## Role of this file
 
-This file is an internal instruction set for AI-assisted development of this repository.  
+This file is an internal instruction set for AI-assisted development of this repository.
 It is not user-facing documentation.
 
 Its purpose is to:
@@ -10,8 +10,6 @@ Its purpose is to:
 - reduce repeated debates;
 - keep future changes aligned with the real direction of the project;
 - help an AI assistant continue development without re-discovering already settled decisions.
-
----
 
 ## Project identity
 
@@ -22,10 +20,8 @@ Its purpose is to:
 - Runtime: .NET Framework 4.7.2
 - Language: C#
 
-This is not a public product and not a reusable library.  
+This is not a public product and not a reusable library.
 Practical reliability for a single owner is more important than public-facing polish.
-
----
 
 ## Tech stack
 
@@ -35,8 +31,6 @@ Practical reliability for a single owner is more important than public-facing po
 - Newtonsoft.Json
 - WebSocketSharp
 - System.Windows.Forms.DataVisualization.Charting
-
----
 
 ## Functional goal
 
@@ -57,15 +51,16 @@ Current implemented behavior:
 - keep candle cache in memory by symbol;
 - receive real-time market-wide kline updates into the cache;
 - detect broken market-cache continuity per symbol and recover that symbol through targeted REST resync;
-- always show forced symbols even if no filter matches;
+- update the visible symbols list item-by-item instead of full rebinding;
+- preserve manual symbol selection during real-time market updates;
+- suppress internal selection events during programmatic restoration of the selected symbol;
+- prevent redundant selected-chart reloads when the chosen symbol did not actually change;
 - allow single-symbol selection;
 - allow interval selection;
 - persist the selected interval in `Properties.Settings`;
 - load the selected chart through REST;
 - update the selected chart through a dedicated WebSocket;
 - resync the selected chart if candle continuity is broken.
-
----
 
 ## Current architecture
 
@@ -82,11 +77,12 @@ Form responsibilities:
 - initialize supported intervals;
 - initialize chart styling;
 - trigger market loading;
-- build the visible symbols list;
+- build and maintain the visible symbols list;
 - keep the currently selected candle list in memory;
 - draw and update the chart;
 - coordinate REST and WebSocket services;
-- trigger selected-symbol resync when sequence integrity is violated.
+- trigger selected-symbol resync when sequence integrity is violated;
+- suppress event side effects during internal UI state restoration.
 
 ### Services
 
@@ -116,6 +112,7 @@ Responsibilities:
 - provide symbols eligible for display;
 - enforce forced-symbol inclusion;
 - update cached candles in real time;
+- request targeted symbol resync when continuity is broken;
 - serve as the base for future screening logic.
 
 #### `MarketWebSocketService`
@@ -135,7 +132,8 @@ Explicit Binance payload models are used, including:
 - `BinanceCandle`
 - `BinanceKlineStreamMessage`
 - `BinanceKlineData`
-- `BinanceCombinedStreamMessage<T>`
+- `BinanceCombinedStreamMessage`
+- `MarketCandleUpdateResult`
 
 ### Constants
 
@@ -161,8 +159,6 @@ Examples:
 - default symbol
 - default interval
 - default candle limit
-
----
 
 ## Current runtime flow
 
@@ -191,9 +187,9 @@ Current behavior:
 4. get tracked symbols from `marketCacheService.GetTrackedSymbols()`;
 5. start `MarketWebSocketService` for tracked symbols;
 6. get display symbols from `marketCacheService.GetDisplaySymbols()`;
-7. bind the result to `listBoxSymbols`;
-8. restore previous/default selection if possible;
-9. call `ReloadChartAndStreamAsync()`.
+7. populate `listBoxSymbols`;
+8. restore previous/default selection if possible under suppression of selection events;
+9. call `ReloadChartAndStreamAsync()` intentionally once after selection is set.
 
 ### Selected chart flow
 
@@ -202,7 +198,8 @@ For the currently selected symbol:
 2. load candles through REST;
 3. replace local selected-symbol candle list;
 4. redraw chart;
-5. connect a fresh WebSocket stream for the selected symbol.
+5. connect a fresh WebSocket stream for the selected symbol;
+6. remember the loaded symbol in `currentChartSymbol`.
 
 ### Market-wide real-time flow
 
@@ -213,7 +210,8 @@ For all tracked symbols:
 4. candle is converted to `BinanceCandle`;
 5. `MarketCacheService.UpdateCandle(...)` attempts to update in-memory cache;
 6. if continuity is valid, cache is updated normally;
-7. if continuity is broken, the app triggers targeted REST resync only for that symbol.
+7. if continuity is broken, the app triggers targeted REST resync only for that symbol;
+8. UI visibility is updated per symbol through add/remove operations instead of full list rebinding.
 
 ### Stop button flow
 
@@ -223,25 +221,20 @@ When the user presses `Stop`:
 - app leaves running state;
 - status becomes `"Остановлено"`.
 
----
-
 ## Current market display policy
 
-The app does **not** show the full active market by default.
+The app does not show the full active market by default.
 
 The visible symbol list is produced by `MarketCacheService.GetDisplaySymbols()`:
 - forced symbols are always included;
-- additional symbols may be included later by filter logic;
+- additional symbols may be included by filter logic;
 - symbols without cached candles are excluded;
-- currently `MatchesFilter(...)` is still a stub.
+- currently `MatchesFilter(...)` keeps symbols whose latest candle is green.
 
-At the current stage, the practical visible result is:
-- `BTCUSDT`
-- `ETHUSDT`
-
-unless future filter logic is implemented.
-
----
+The visible list is then maintained in the UI incrementally:
+- `AddSymbolToListBox(...)` inserts a symbol into the sorted list;
+- `RemoveSymbolFromListBox(...)` removes a symbol if it is not currently selected;
+- `RestoreSelectedSymbol(...)` keeps the prior selection without triggering chart reload.
 
 ## Forced symbol policy
 
@@ -249,23 +242,19 @@ The following symbols must always be shown:
 - `BTCUSDT`
 - `ETHUSDT`
 
-These are product rules, not hacks.  
-They must remain visible even when real screening logic is added later.
-
----
+These are product rules, not hacks.
+They must remain visible even when real screening logic is expanded later.
 
 ## Binance interval policy
 
 Supported Binance kline intervals are a fixed API contract and are intentionally hardcoded.
 
-They must **not** be moved into `Properties.Settings`.
+They must not be moved into `Properties.Settings`.
 
 If needed, keep them in:
 - a dedicated immutable helper;
 - a static readonly collection;
 - constants intended for immutable API values.
-
----
 
 ## Interval persistence policy
 
@@ -277,11 +266,9 @@ When the user changes the interval:
 
 This is intentional.
 
----
-
 ## Market bootstrap policy
 
-The active futures universe is dynamic.  
+The active futures universe is dynamic.
 Do not assume the Binance symbol set is static.
 
 Market bootstrap currently does:
@@ -289,10 +276,8 @@ Market bootstrap currently does:
 2. load recent candle history for each symbol for the selected interval;
 3. build an in-memory candle cache keyed by symbol.
 
-The preload strategy uses asynchronous parallel loading with `Task.WhenAll(...)`.  
+The preload strategy uses asynchronous parallel loading with `Task.WhenAll(...)`.
 This is intentional and should remain the default unless there is a concrete rate-limit or reliability reason to redesign it.
-
----
 
 ## Selected chart loading policy
 
@@ -303,15 +288,14 @@ The currently selected chart is still loaded independently through `BinanceRestS
 This separation is intentional:
 - `MarketCacheService` supports market bootstrap and future screening;
 - selected-symbol chart loading uses a fresh authoritative source;
-- chart correctness is more important than avoiding reloads.
-
----
+- chart correctness is more important than avoiding reloads;
+- redundant reloads caused by internal selection restoration are not acceptable and must be suppressed.
 
 ## Real-time policy
 
 ### Current implemented real-time behavior
 
-Right now, real-time updates exist in **two layers**:
+Right now, real-time updates exist in two layers:
 
 1. **Selected-symbol real-time**
 - one dedicated WebSocket connection is used for the selected chart;
@@ -321,33 +305,28 @@ Right now, real-time updates exist in **two layers**:
 2. **Market-wide real-time**
 - one combined WebSocket connection is used for tracked symbols;
 - incoming kline updates update only the market cache;
-- this cache is intended for future screening / filtering logic.
+- these updates may also change whether a symbol should be visible in the UI;
+- visibility updates should be applied incrementally, not through full rebinding.
 
-### Important current UX rule
+### Important current UX rules
 
-Although market-wide real-time cache updates are active, the visible symbols list is **not** currently rebound on every market tick.
+The symbol list may change in real time, but the selected symbol must remain stable.
 
-This is intentional.
+Programmatic selection restoration must not be treated as a user action.
 
-A previous attempt to refresh `listBoxSymbols` in real time caused two concrete problems:
-- selecting another symbol became unreliable;
-- the `STOP` button flickered between enabled and disabled states too often to be usable.
+Specifically:
+- `suppressSymbolSelectionChanged` is required when selection is restored internally;
+- `ListBoxSymbols_SelectedIndexChanged(...)` must immediately return while suppression is active;
+- the handler must also ignore cases where the selected symbol equals `currentChartSymbol`;
+- market-driven list updates must not trigger redundant chart reloads;
+- market-driven list updates must not cause button flicker or unstable selection.
 
-Therefore, at the current stage:
-- market-wide updates may update cache;
-- market-wide updates must **not** trigger high-frequency `listBoxSymbols` rebinding;
-- market-wide updates must **not** frequently toggle general UI state.
+### Legacy rebinding rule
 
-### Current temporary rule
+`RefreshSymbolsListPreserveSelection()` exists only as a legacy full-rebuild approach.
+It is intentionally not used in live symbol updates because it previously caused unstable selection and `STOP` button flicker.
 
-`RefreshSymbolsListPreserveSelection()` exists, but its real-time invocation is intentionally disabled for now.
-
-Do not re-enable per-tick UI rebinding without a more stable strategy, such as:
-- throttling;
-- periodic timer-driven refresh;
-- refresh only when the display set actually changes.
-
----
+Do not reintroduce high-frequency full rebinding without a more stable strategy.
 
 ## Critical implementation facts
 
@@ -366,16 +345,16 @@ The Binance payload contains:
 - `t` = open time
 - `T` = close time
 
-These fields differ only by case and have different meaning.  
+These fields differ only by case and have different meaning.
 They must both be explicitly mapped in the model.
 
-### 3. `BinanceCombinedStreamMessage<T>` is required for market-wide streams
+### 3. `BinanceCombinedStreamMessage` is required for market-wide streams
 
 Combined Binance streams wrap payloads in:
 - `stream`
 - `data`
 
-Therefore market-wide stream deserialization must use `BinanceCombinedStreamMessage<T>` instead of trying to deserialize directly into a plain kline message.
+Therefore market-wide stream deserialization must use `BinanceCombinedStreamMessage` instead of trying to deserialize directly into a plain kline message.
 
 ### 4. `BinanceCandle` must carry continuity fields
 
@@ -397,7 +376,7 @@ Intended rule:
 - `incoming.OpenTimeMs == lastCandle.CloseTimeMs + 1`
 - `lastCandle.IsClosed == true`
 
-If this rule fails, do not silently continue.  
+If this rule fails, do not silently continue.
 Trigger a REST resync for the selected symbol.
 
 ### 6. Market cache continuity recovery is targeted per symbol
@@ -405,13 +384,12 @@ Trigger a REST resync for the selected symbol.
 `MarketCacheService.UpdateCandle(...)` updates an existing candle if `OpenTimeMs` matches.
 
 If a new candle is appended, it must satisfy both conditions:
-- `incoming.OpenTimeMs == lastCandle.CloseTimeMs + 1`
-- `lastCandle.IsClosed == true`
+- `incoming.OpenTimeMs == last.CloseTimeMs + 1`
+- `last.IsClosed == true`
 
 If either condition fails, market-cache continuity is considered broken for that symbol.
 
-In that case, `UpdateCandle(...)` must not silently accept the data and must not silently ignore the problem.  
-Instead, it returns `MarketCandleUpdateResult.ResyncRequired`.
+In that case, `UpdateCandle(...)` returns `MarketCandleUpdateResult.ResyncRequired`.
 
 The recovery strategy is:
 - detect the broken sequence for one symbol;
@@ -419,18 +397,13 @@ The recovery strategy is:
 - reload fresh candles through `BinanceRestService`;
 - replace cached candles through `ReplaceSymbolCandles(...)`.
 
-This is intentional.
-
-The goal is:
-- keep market-wide real-time processing lightweight;
-- recover only the damaged symbol cache;
-- avoid global market reload when only one symbol becomes inconsistent.
-
 ### 7. Selected chart correctness is more important than avoiding reloads
 
 For the currently selected symbol, it is acceptable to reload candles through REST when continuity is suspicious.
 
 Correctness has higher priority than minimizing reload count.
+
+At the same time, false reloads caused by UI side effects must be prevented.
 
 ### 8. .NET Framework 4.7.2 limitation
 
@@ -450,17 +423,28 @@ After rebinding `ListBox.DataSource`, always reassign:
 
 Also keep `BinanceSymbol.ToString()` returning `Symbol` as a defensive fallback.
 
-### 10. Selected chart reload flow is intentional
+### 10. Programmatic selection must not trigger selected-chart reload
 
-When symbol changes:
-1. disconnect current selected-symbol WebSocket;
-2. load selected-symbol candles through REST;
-3. redraw chart;
-4. connect a new selected-symbol WebSocket stream.
+When the app restores or preserves the selected symbol internally:
+- it must use `suppressSymbolSelectionChanged`;
+- it must not call `ReloadChartAndStreamAsync()` indirectly through `SelectedIndexChanged`;
+- only an actual user-driven symbol change should reload the selected chart.
 
-This behavior is intentional and should be preserved unless explicitly redesigned.
+This rule exists to prevent:
+- REST overuse;
+- redundant WebSocket reconnects;
+- chart flicker;
+- disappearing or unstable latest candles.
 
----
+### 11. Candle coloring in WinForms chart
+
+For the candlestick chart, `PriceUpColor` and `PriceDownColor` alone are not treated as sufficient for correct visual coloring of all candle parts in the current implementation.
+
+The chart currently relies on per-point coloring:
+- green when `Close >= Open`
+- red when `Close < Open`
+
+Do not remove point-level candle coloring unless the wick/tail coloring problem is solved and visually verified.
 
 ## Architectural rules
 
@@ -471,9 +455,8 @@ This behavior is intentional and should be preserved unless explicitly redesigne
 5. Prefer incremental refactoring over large rewrites.
 6. Preserve the current project structure unless a change is explicitly requested.
 7. Prefer practical reliability over abstract architectural purity.
-8. Do not introduce high-frequency UI rebinding as a side effect of real-time processing.
-
----
+8. Do not introduce event-driven UI side effects that cause redundant REST reloads.
+9. Prefer incremental list maintenance over high-frequency full list rebinding.
 
 ## Decisions that are already settled
 
@@ -489,12 +472,10 @@ Do not reopen these without an explicit request.
 - `MarketCacheService` is a valid part of the architecture and not temporary clutter.
 - `MarketWebSocketService` is a valid part of the architecture.
 - Forced symbols are a product rule, not a hack.
-- Showing only forced symbols at the current stage is acceptable while screening logic is still being built.
 - The selected chart may reload through REST when WebSocket continuity is questionable.
 - UI stability has higher priority than aggressive real-time list refresh.
-- Real-time market cache updates are allowed even when UI list refresh is temporarily disabled.
-
----
+- Market-driven symbol list changes must preserve selection and must not trigger redundant chart reload.
+- Point-level candle coloring is currently an accepted implementation detail.
 
 ## Guidance for future suggestions
 
@@ -508,8 +489,6 @@ When proposing changes:
 - avoid framework migration suggestions unless explicitly requested;
 - avoid suggesting WPF, MAUI, Avalonia, Web UI, or full rewrites unless explicitly requested;
 - treat this file as authoritative unless explicitly overridden.
-
----
 
 ## Guidance for future refactoring
 
@@ -528,27 +507,26 @@ Weak reasons:
 - unnecessary modernization;
 - changes made only because they are fashionable.
 
----
-
 ## Expected next directions
 
 Likely future work includes:
-- implementing real filter logic in `MatchesFilter(...)`;
+- expanding real filter logic beyond the current green-last-candle rule;
 - pattern detection logic;
 - candle analysis helpers;
 - expanding `MarketCacheService`;
 - optional refinement of market-cache resync strategy (backoff, retry policy, diagnostics);
-- careful reintroduction of dynamic visible-symbol refresh;
+- careful improvement of dynamic visible-symbol refresh;
 - chart behavior improvements;
 - a settings form;
 - additional services built on top of the existing baseline.
 
-If dynamic symbol refresh is added later, it should:
+If dynamic symbol refresh is extended further, it should:
 - update cache first;
-- avoid rebinding `ListBox` on every tick;
-- avoid frequent `UpdateControlsState()` calls from market events;
+- prefer item-level add/remove over full rebinding;
 - preserve correct manual symbol switching;
-- preserve stable `STOP` button behavior.
+- preserve stable `STOP` button behavior;
+- preserve selected-chart continuity;
+- avoid extra REST chart reloads.
 
 Future work should preserve the already working behavior:
 - market bootstrap;
@@ -560,9 +538,8 @@ Future work should preserve the already working behavior:
 - selected-symbol REST loading;
 - selected-symbol dedicated WebSocket real-time updates;
 - candle continuity checks;
-- selected-symbol resync behavior.
-
----
+- selected-symbol resync behavior;
+- suppression of false reloads caused by internal selection restoration.
 
 ## Preferred collaboration style
 
