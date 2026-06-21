@@ -16,6 +16,8 @@ namespace BinanceFuturesViewer
         private readonly BinanceRestService restService = new BinanceRestService();
         private readonly BinanceWebSocketService webSocketService = new BinanceWebSocketService();
         private readonly MarketCacheService marketCacheService = new MarketCacheService();
+        private readonly MarketWebSocketService marketWebSocketService = new MarketWebSocketService();
+
         private readonly object candlesLock = new object();
 
         private List<BinanceCandle> candles = new List<BinanceCandle>();
@@ -44,6 +46,10 @@ namespace BinanceFuturesViewer
             webSocketService.StatusChanged += WebSocketService_StatusChanged;
             webSocketService.ErrorOccurred += WebSocketService_ErrorOccurred;
 
+            marketWebSocketService.CandleReceived += MarketWebSocketService_CandleReceived;
+            marketWebSocketService.StatusChanged += MarketWebSocketService_StatusChanged;
+            marketWebSocketService.ErrorOccurred += MarketWebSocketService_ErrorOccurred;
+
             listBoxSymbols.SelectionMode = SelectionMode.One;
             listBoxSymbols.DisplayMember = nameof(BinanceSymbol.Symbol);
             listBoxSymbols.ValueMember = nameof(BinanceSymbol.Symbol);
@@ -69,6 +75,7 @@ namespace BinanceFuturesViewer
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
         {
+            marketWebSocketService.Disconnect();
             webSocketService.Disconnect();
             isRunning = false;
         }
@@ -178,6 +185,7 @@ namespace BinanceFuturesViewer
             if (!isRunning || isUpdatingUi || isLoadingChart || isResyncInProgress)
                 return;
 
+            marketWebSocketService.Disconnect();
             webSocketService.Disconnect();
 
             isRunning = false;
@@ -206,6 +214,9 @@ namespace BinanceFuturesViewer
             if (!isRunning || isUpdatingUi || isLoadingChart || isResyncInProgress)
                 return;
 
+            if (listBoxSymbols.SelectedIndex < 0)
+                return;
+
             await ReloadChartAndStreamAsync();
         }
 
@@ -226,7 +237,12 @@ namespace BinanceFuturesViewer
 
                 await marketCacheService.InitializeAsync(interval, candleLimit);
 
+                var trackedSymbols = marketCacheService.GetTrackedSymbols();
+                marketWebSocketService.Connect(trackedSymbols, interval);
+
                 var symbols = marketCacheService.GetDisplaySymbols();
+
+                string previouslySelectedSymbol = GetSelectedSymbolCode();
 
                 listBoxSymbols.BeginUpdate();
                 listBoxSymbols.DataSource = null;
@@ -238,8 +254,24 @@ namespace BinanceFuturesViewer
 
                 if (symbols.Count > 0)
                 {
-                    string defaultSymbol = Properties.Settings.Default.DefaultSymbol;
-                    var selected = symbols.FirstOrDefault(x => x.Symbol == defaultSymbol);
+                    BinanceSymbol selected = null;
+
+                    if (!string.IsNullOrWhiteSpace(previouslySelectedSymbol))
+                    {
+                        selected = symbols.FirstOrDefault(x =>
+                            x.Symbol.Equals(previouslySelectedSymbol, StringComparison.OrdinalIgnoreCase));
+                    }
+
+                    if (selected == null)
+                    {
+                        string defaultSymbol = Properties.Settings.Default.DefaultSymbol;
+
+                        if (!string.IsNullOrWhiteSpace(defaultSymbol))
+                        {
+                            selected = symbols.FirstOrDefault(x =>
+                                x.Symbol.Equals(defaultSymbol, StringComparison.OrdinalIgnoreCase));
+                        }
+                    }
 
                     if (selected != null)
                         listBoxSymbols.SelectedItem = selected;
@@ -253,7 +285,7 @@ namespace BinanceFuturesViewer
                         candles = new List<BinanceCandle>();
                     }
 
-                    DrawCandles("-", GetSelectedInterval());
+                    DrawCandles("-", interval);
                 }
 
                 lblStatus.Text = $"Инструментов для показа: {symbols.Count}";
@@ -482,6 +514,96 @@ namespace BinanceFuturesViewer
         public string GetSelectedInterval()
         {
             return comboBoxInterval.SelectedItem?.ToString();
+        }
+
+        private void MarketWebSocketService_CandleReceived(string symbol, BinanceCandle incoming)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke((Action)(() => MarketWebSocketService_CandleReceived(symbol, incoming)));
+                return;
+            }
+
+            if (!isRunning)
+                return;
+
+            marketCacheService.UpdateCandle(
+                symbol,
+                incoming,
+                Properties.Settings.Default.DefaultCandlesLimit);
+
+            //var currentSelectedSymbol = GetSelectedSymbolCode();
+            //if (string.Equals(currentSelectedSymbol, symbol, StringComparison.OrdinalIgnoreCase))
+            //{
+            //    return;
+            //}
+
+            //RefreshSymbolsListPreserveSelection();
+        }
+
+        private void RefreshSymbolsListPreserveSelection()
+        {
+            if (isUpdatingUi || isLoadingChart || isResyncInProgress)
+                return;
+
+            string selectedSymbolCode = GetSelectedSymbolCode();
+            var symbols = marketCacheService.GetDisplaySymbols();
+
+            isUpdatingUi = true;
+            UpdateControlsState();
+
+            try
+            {
+                listBoxSymbols.BeginUpdate();
+                listBoxSymbols.DataSource = null;
+                listBoxSymbols.Items.Clear();
+                listBoxSymbols.DataSource = symbols;
+                listBoxSymbols.DisplayMember = nameof(BinanceSymbol.Symbol);
+                listBoxSymbols.ValueMember = nameof(BinanceSymbol.Symbol);
+                listBoxSymbols.EndUpdate();
+
+                if (!string.IsNullOrWhiteSpace(selectedSymbolCode))
+                {
+                    var selected = symbols.FirstOrDefault(x =>
+                        x.Symbol.Equals(selectedSymbolCode, StringComparison.OrdinalIgnoreCase));
+
+                    if (selected != null)
+                    {
+                        listBoxSymbols.SelectedItem = selected;
+                        return;
+                    }
+                }
+
+                if (symbols.Count > 0)
+                    listBoxSymbols.SelectedIndex = 0;
+            }
+            finally
+            {
+                isUpdatingUi = false;
+                UpdateControlsState();
+            }
+        }
+
+        private void MarketWebSocketService_StatusChanged(string message)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke((Action)(() => MarketWebSocketService_StatusChanged(message)));
+                return;
+            }
+
+            lblStatus.Text = message;
+        }
+
+        private void MarketWebSocketService_ErrorOccurred(string message)
+        {
+            if (InvokeRequired)
+            {
+                BeginInvoke((Action)(() => MarketWebSocketService_ErrorOccurred(message)));
+                return;
+            }
+
+            lblStatus.Text = "Ошибка Market WebSocket: " + message;
         }
     }
 }

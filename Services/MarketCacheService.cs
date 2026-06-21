@@ -145,5 +145,77 @@ namespace BinanceFuturesViewer.Services
             public List<BinanceCandle> Candles { get; set; }
             public bool Success { get; set; }
         }
+
+        public List<string> GetTrackedSymbols()
+        {
+            lock (syncRoot)
+            {
+                return candlesBySymbol.Keys
+                    .OrderBy(x => x)
+                    .ToList();
+            }
+        }
+
+        public void UpdateCandle(string symbol, BinanceCandle incoming, int candleLimit)
+        {
+            if (string.IsNullOrWhiteSpace(symbol) || incoming == null)
+                return;
+
+            lock (syncRoot)
+            {
+                if (!candlesBySymbol.TryGetValue(symbol, out var candles))
+                    return;
+
+                candles = candles
+                    .OrderBy(x => x.OpenTimeMs)
+                    .ToList();
+
+                int existingIndex = candles.FindIndex(x => x.OpenTimeMs == incoming.OpenTimeMs);
+
+                if (existingIndex >= 0)
+                {
+                    candles[existingIndex] = incoming;
+                }
+                else
+                {
+                    if (candles.Count == 0)
+                    {
+                        candles.Add(incoming);
+                    }
+                    else
+                    {
+                        var last = candles[candles.Count - 1];
+                        bool isNext = incoming.OpenTimeMs == last.CloseTimeMs + 1;
+
+                        if (!isNext)
+                        {
+                            return;
+                        }
+
+                        candles.Add(incoming);
+                    }
+                }
+
+                candles = candles
+                    .OrderBy(x => x.OpenTimeMs)
+                    .Skip(Math.Max(0, candles.Count - candleLimit))
+                    .ToList();
+
+                candlesBySymbol[symbol] = candles;
+            }
+        }
+
+        public void ReplaceSymbolCandles(string symbol, List<BinanceCandle> candles)
+        {
+            if (string.IsNullOrWhiteSpace(symbol) || candles == null)
+                return;
+
+            lock (syncRoot)
+            {
+                candlesBySymbol[symbol] = candles
+                    .OrderBy(x => x.OpenTimeMs)
+                    .ToList();
+            }
+        }
     }
 }

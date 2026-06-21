@@ -64,6 +64,7 @@
       <DependentUpon>Form1.cs</DependentUpon>
     </Compile>
     <Compile Include="Models\BinanceCandle.cs" />
+    <Compile Include="Models\BinanceCombinedStreamMessage.cs" />
     <Compile Include="Models\BinanceExchangeInfo.cs" />
     <Compile Include="Models\BinanceKlineData.cs" />
     <Compile Include="Models\BinanceKlineStreamMessage.cs" />
@@ -73,6 +74,7 @@
     <Compile Include="Services\BinanceRestService.cs" />
     <Compile Include="Services\BinanceWebSocketService.cs" />
     <Compile Include="Services\MarketCacheService.cs" />
+    <Compile Include="Services\MarketWebSocketService.cs" />
     <EmbeddedResource Include="Form1.resx">
       <DependentUpon>Form1.cs</DependentUpon>
     </EmbeddedResource>
