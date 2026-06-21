@@ -56,6 +56,7 @@ Current implemented behavior:
 - preload candle history for the selected interval;
 - keep candle cache in memory by symbol;
 - receive real-time market-wide kline updates into the cache;
+- detect broken market-cache continuity per symbol and recover that symbol through targeted REST resync;
 - always show forced symbols even if no filter matches;
 - allow single-symbol selection;
 - allow interval selection;
@@ -210,7 +211,9 @@ For all tracked symbols:
 2. incoming combined-stream payload is deserialized;
 3. symbol is extracted from stream name;
 4. candle is converted to `BinanceCandle`;
-5. `MarketCacheService.UpdateCandle(...)` updates in-memory cache.
+5. `MarketCacheService.UpdateCandle(...)` attempts to update in-memory cache;
+6. if continuity is valid, cache is updated normally;
+7. if continuity is broken, the app triggers targeted REST resync only for that symbol.
 
 ### Stop button flow
 
@@ -397,14 +400,31 @@ Intended rule:
 If this rule fails, do not silently continue.  
 Trigger a REST resync for the selected symbol.
 
-### 6. Market cache update currently prefers safety over aggressive recovery
+### 6. Market cache continuity recovery is targeted per symbol
 
 `MarketCacheService.UpdateCandle(...)` updates an existing candle if `OpenTimeMs` matches.
 
-If a new candle is appended, it must be the exact next candle by time sequence.  
-If continuity is broken for a market-cache update, the current implementation simply ignores that update instead of forcing an automatic resync.
+If a new candle is appended, it must satisfy both conditions:
+- `incoming.OpenTimeMs == lastCandle.CloseTimeMs + 1`
+- `lastCandle.IsClosed == true`
 
-This is intentional for the current stage.
+If either condition fails, market-cache continuity is considered broken for that symbol.
+
+In that case, `UpdateCandle(...)` must not silently accept the data and must not silently ignore the problem.  
+Instead, it returns `MarketCandleUpdateResult.ResyncRequired`.
+
+The recovery strategy is:
+- detect the broken sequence for one symbol;
+- trigger targeted REST resync only for that symbol;
+- reload fresh candles through `BinanceRestService`;
+- replace cached candles through `ReplaceSymbolCandles(...)`.
+
+This is intentional.
+
+The goal is:
+- keep market-wide real-time processing lightweight;
+- recover only the damaged symbol cache;
+- avoid global market reload when only one symbol becomes inconsistent.
 
 ### 7. Selected chart correctness is more important than avoiding reloads
 
@@ -517,7 +537,7 @@ Likely future work includes:
 - pattern detection logic;
 - candle analysis helpers;
 - expanding `MarketCacheService`;
-- safer market-cache resync strategy for broken market-wide continuity;
+- optional refinement of market-cache resync strategy (backoff, retry policy, diagnostics);
 - careful reintroduction of dynamic visible-symbol refresh;
 - chart behavior improvements;
 - a settings form;
