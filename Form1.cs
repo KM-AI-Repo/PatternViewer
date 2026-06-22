@@ -55,6 +55,9 @@ namespace BinanceFuturesViewer
             marketWebSocketService.StatusChanged += MarketWebSocketService_StatusChanged;
             marketWebSocketService.ErrorOccurred += MarketWebSocketService_ErrorOccurred;
 
+            numericComparisonWindow.ValueChanged += NumericSimilarityWindow_ValueChanged;
+            numericDistanceThreshold.ValueChanged += NumericSimilarityThreshold_ValueChanged;
+
             listBoxSymbols.SelectionMode = SelectionMode.One;
 
             comboBoxInterval.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -64,6 +67,7 @@ namespace BinanceFuturesViewer
         {
             InitializeChart();
             InitializeIntervals();
+            ApplySimilaritySettingsToMarketCache();
 
             lock (candlesLock)
             {
@@ -796,6 +800,92 @@ namespace BinanceFuturesViewer
         {
             var selected = GetSelectedSymbolCode();
             return string.IsNullOrWhiteSpace(selected) ? "-" : selected;
+        }
+
+        private void ApplySimilaritySettingsToMarketCache()
+        {
+            marketCacheService.SetSimilarityFilterSettings(
+                (int)numericComparisonWindow.Value,
+                (decimal)numericDistanceThreshold.Value);
+        }
+
+        private async void NumericSimilarityWindow_ValueChanged(object sender, EventArgs e)
+        {
+            ApplySimilaritySettingsToMarketCache();
+            await RefreshVisibleSymbolsFromCacheAsync();
+        }
+
+        private async void NumericSimilarityThreshold_ValueChanged(object sender, EventArgs e)
+        {
+            ApplySimilaritySettingsToMarketCache();
+            await RefreshVisibleSymbolsFromCacheAsync();
+        }
+
+        private async Task RefreshVisibleSymbolsFromCacheAsync()
+        {
+            if (!isRunning || isUpdatingUi || isLoadingChart || isResyncInProgress)
+                return;
+
+            try
+            {
+                isUpdatingUi = true;
+                UpdateControlsState();
+
+                string previouslySelectedSymbol = GetSelectedSymbolCode();
+                var symbols = marketCacheService.GetDisplaySymbols();
+
+                listBoxSymbols.BeginUpdate();
+
+                try
+                {
+                    listBoxSymbols.Items.Clear();
+
+                    foreach (var symbol in symbols.OrderBy(x => x.Symbol))
+                    {
+                        listBoxSymbols.Items.Add(symbol);
+                    }
+
+                    suppressSymbolSelectionChanged = true;
+
+                    try
+                    {
+                        if (!string.IsNullOrWhiteSpace(previouslySelectedSymbol))
+                        {
+                            var selected = listBoxSymbols.Items
+                                .Cast<BinanceSymbol>()
+                                .FirstOrDefault(x => x.Symbol.Equals(previouslySelectedSymbol, StringComparison.OrdinalIgnoreCase));
+
+                            if (selected != null)
+                            {
+                                listBoxSymbols.SelectedItem = selected;
+                            }
+                            else if (listBoxSymbols.Items.Count > 0)
+                            {
+                                listBoxSymbols.SelectedIndex = 0;
+                            }
+                        }
+                        else if (listBoxSymbols.Items.Count > 0)
+                        {
+                            listBoxSymbols.SelectedIndex = 0;
+                        }
+                    }
+                    finally
+                    {
+                        suppressSymbolSelectionChanged = false;
+                    }
+                }
+                finally
+                {
+                    listBoxSymbols.EndUpdate();
+                }
+
+                lblStatus.Text = $"Инструментов для показа: {symbols.Count}";
+            }
+            finally
+            {
+                isUpdatingUi = false;
+                UpdateControlsState();
+            }
         }
     }
 }

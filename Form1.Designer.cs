@@ -37,7 +37,13 @@
             this.lblStatus = new System.Windows.Forms.Label();
             this.btnStart = new System.Windows.Forms.Button();
             this.btnStop = new System.Windows.Forms.Button();
+            this.lblSimilarityWindow = new System.Windows.Forms.Label();
+            this.numericComparisonWindow = new System.Windows.Forms.NumericUpDown();
+            this.lblSimilarityThreshold = new System.Windows.Forms.Label();
+            this.numericDistanceThreshold = new System.Windows.Forms.NumericUpDown();
             ((System.ComponentModel.ISupportInitialize)(this.chartCandles)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.numericComparisonWindow)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.numericDistanceThreshold)).BeginInit();
             this.SuspendLayout();
             // 
             // listBoxSymbols
@@ -78,7 +84,7 @@
             // lblStatus
             // 
             this.lblStatus.AutoSize = true;
-            this.lblStatus.Location = new System.Drawing.Point(226, 12);
+            this.lblStatus.Location = new System.Drawing.Point(587, 12);
             this.lblStatus.Name = "lblStatus";
             this.lblStatus.Size = new System.Drawing.Size(37, 13);
             this.lblStatus.TabIndex = 5;
@@ -86,7 +92,7 @@
             // 
             // btnStart
             // 
-            this.btnStart.Location = new System.Drawing.Point(105, 8);
+            this.btnStart.Location = new System.Drawing.Point(466, 7);
             this.btnStart.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
             this.btnStart.Name = "btnStart";
             this.btnStart.Size = new System.Drawing.Size(56, 21);
@@ -96,7 +102,7 @@
             // 
             // btnStop
             // 
-            this.btnStop.Location = new System.Drawing.Point(165, 8);
+            this.btnStop.Location = new System.Drawing.Point(526, 7);
             this.btnStop.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
             this.btnStop.Name = "btnStop";
             this.btnStop.Size = new System.Drawing.Size(56, 21);
@@ -104,11 +110,84 @@
             this.btnStop.Text = "Stop";
             this.btnStop.UseVisualStyleBackColor = true;
             // 
+            // lblSimilarityWindow
+            // 
+            this.lblSimilarityWindow.AutoSize = true;
+            this.lblSimilarityWindow.Location = new System.Drawing.Point(104, 11);
+            this.lblSimilarityWindow.Margin = new System.Windows.Forms.Padding(2, 0, 2, 0);
+            this.lblSimilarityWindow.Name = "lblSimilarityWindow";
+            this.lblSimilarityWindow.Size = new System.Drawing.Size(46, 13);
+            this.lblSimilarityWindow.TabIndex = 8;
+            this.lblSimilarityWindow.Text = "Window";
+            // 
+            // numericComparisonWindow
+            // 
+            this.numericComparisonWindow.Location = new System.Drawing.Point(155, 8);
+            this.numericComparisonWindow.Maximum = new decimal(new int[] {
+            99,
+            0,
+            0,
+            0});
+            this.numericComparisonWindow.Minimum = new decimal(new int[] {
+            10,
+            0,
+            0,
+            0});
+            this.numericComparisonWindow.Name = "numericComparisonWindow";
+            this.numericComparisonWindow.Size = new System.Drawing.Size(120, 20);
+            this.numericComparisonWindow.TabIndex = 9;
+            this.numericComparisonWindow.Value = new decimal(new int[] {
+            50,
+            0,
+            0,
+            0});
+            // 
+            // lblSimilarityThreshold
+            // 
+            this.lblSimilarityThreshold.AutoSize = true;
+            this.lblSimilarityThreshold.Location = new System.Drawing.Point(281, 10);
+            this.lblSimilarityThreshold.Name = "lblSimilarityThreshold";
+            this.lblSimilarityThreshold.Size = new System.Drawing.Size(54, 13);
+            this.lblSimilarityThreshold.TabIndex = 10;
+            this.lblSimilarityThreshold.Text = "Threshold";
+            // 
+            // numericDistanceThreshold
+            // 
+            this.numericDistanceThreshold.DecimalPlaces = 4;
+            this.numericDistanceThreshold.Increment = new decimal(new int[] {
+            5,
+            0,
+            0,
+            196608});
+            this.numericDistanceThreshold.Location = new System.Drawing.Point(341, 8);
+            this.numericDistanceThreshold.Maximum = new decimal(new int[] {
+            1,
+            0,
+            0,
+            0});
+            this.numericDistanceThreshold.Minimum = new decimal(new int[] {
+            1,
+            0,
+            0,
+            196608});
+            this.numericDistanceThreshold.Name = "numericDistanceThreshold";
+            this.numericDistanceThreshold.Size = new System.Drawing.Size(120, 20);
+            this.numericDistanceThreshold.TabIndex = 11;
+            this.numericDistanceThreshold.Value = new decimal(new int[] {
+            3,
+            0,
+            0,
+            131072});
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1334, 805);
+            this.Controls.Add(this.numericDistanceThreshold);
+            this.Controls.Add(this.lblSimilarityThreshold);
+            this.Controls.Add(this.numericComparisonWindow);
+            this.Controls.Add(this.lblSimilarityWindow);
             this.Controls.Add(this.btnStop);
             this.Controls.Add(this.btnStart);
             this.Controls.Add(this.lblStatus);
@@ -119,6 +198,8 @@
             this.Name = "Form1";
             this.Text = "Form1";
             ((System.ComponentModel.ISupportInitialize)(this.chartCandles)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.numericComparisonWindow)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.numericDistanceThreshold)).EndInit();
             this.ResumeLayout(false);
             this.PerformLayout();
 
@@ -132,6 +213,10 @@
         private System.Windows.Forms.Label lblStatus;
         private System.Windows.Forms.Button btnStart;
         private System.Windows.Forms.Button btnStop;
+        private System.Windows.Forms.Label lblSimilarityWindow;
+        private System.Windows.Forms.NumericUpDown numericComparisonWindow;
+        private System.Windows.Forms.Label lblSimilarityThreshold;
+        private System.Windows.Forms.NumericUpDown numericDistanceThreshold;
     }
 }
 
