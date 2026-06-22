@@ -43,6 +43,7 @@ The current direction is:
 - show a filtered subset of symbols instead of the full active universe;
 - always keep forced symbols visible;
 - allow chart viewing and real-time updates for the selected symbol;
+- identify futures whose recent price path is sufficiently different from BTCUSDT and ETHUSDT;
 - prepare the codebase for future screening and pattern detection.
 
 Current implemented behavior:
@@ -60,7 +61,9 @@ Current implemented behavior:
 - persist the selected interval in `Properties.Settings`;
 - load the selected chart through REST;
 - update the selected chart through a dedicated WebSocket;
-- resync the selected chart if candle continuity is broken.
+- resync the selected chart if candle continuity is broken;
+- expose live similarity-filter parameters on the form;
+- re-screen symbols from cache when similarity-filter parameters are changed without reloading market data through REST.
 
 ## Current architecture
 
@@ -76,13 +79,15 @@ Form responsibilities:
 - initialize controls;
 - initialize supported intervals;
 - initialize chart styling;
+- apply current filter parameters to `MarketCacheService`;
 - trigger market loading;
 - build and maintain the visible symbols list;
 - keep the currently selected candle list in memory;
 - draw and update the chart;
 - coordinate REST and WebSocket services;
 - trigger selected-symbol resync when sequence integrity is violated;
-- suppress event side effects during internal UI state restoration.
+- suppress event side effects during internal UI state restoration;
+- reapply symbol screening when comparison settings are changed.
 
 ### Services
 
@@ -111,6 +116,8 @@ Responsibilities:
 - keep candle cache in memory by symbol;
 - provide symbols eligible for display;
 - enforce forced-symbol inclusion;
+- compare non-forced symbols against BTCUSDT and ETHUSDT by normalized recent close-path distance;
+- store and apply `comparisonWindow` and `distanceThreshold`;
 - update cached candles in real time;
 - request targeted symbol resync when continuity is broken;
 - serve as the base for future screening logic.
@@ -160,6 +167,11 @@ Examples:
 - default interval
 - default candle limit
 
+Important current distinction:
+- comparison filter runtime values are currently taken from WinForms controls on the main form;
+- Binance interval options remain hardcoded immutable values;
+- comparison filter values are not currently stored in `Properties.Settings`.
+
 ## Current runtime flow
 
 ### Application startup state
@@ -167,6 +179,7 @@ Examples:
 On form load, the application:
 - initializes chart styling;
 - initializes the supported interval list;
+- applies current comparison settings from the form controls to `MarketCacheService`;
 - creates an empty candle list;
 - draws an empty chart;
 - shows status `"Готово к запуску"`.
@@ -211,7 +224,18 @@ For all tracked symbols:
 5. `MarketCacheService.UpdateCandle(...)` attempts to update in-memory cache;
 6. if continuity is valid, cache is updated normally;
 7. if continuity is broken, the app triggers targeted REST resync only for that symbol;
-8. UI visibility is updated per symbol through add/remove operations instead of full list rebinding.
+8. UI visibility is updated per symbol through add/remove operations instead of full list rebinding;
+9. visibility is decided by `MarketCacheService.ShouldDisplaySymbol(symbol)` using the current comparison filter.
+
+### Comparison settings change flow
+
+When the user changes comparison controls on the form:
+1. form reads `numericComparisonWindow` and `numericDistanceThreshold`;
+2. form passes those values into `marketCacheService.SetSimilarityFilterSettings(...)`;
+3. form rebuilds the visible symbols list from current in-memory cache;
+4. selection is preserved under suppression;
+5. selected chart is not reloaded only because filter settings changed;
+6. no REST reload of market candles is performed.
 
 ### Stop button flow
 
@@ -229,12 +253,77 @@ The visible symbol list is produced by `MarketCacheService.GetDisplaySymbols()`:
 - forced symbols are always included;
 - additional symbols may be included by filter logic;
 - symbols without cached candles are excluded;
-- currently `MatchesFilter(...)` keeps symbols whose latest candle is green.
+- currently the filter keeps symbols whose recent normalized close-path is sufficiently different from both BTCUSDT and ETHUSDT.
 
 The visible list is then maintained in the UI incrementally:
 - `AddSymbolToListBox(...)` inserts a symbol into the sorted list;
 - `RemoveSymbolFromListBox(...)` removes a symbol if it is not currently selected;
 - `RestoreSelectedSymbol(...)` keeps the prior selection without triggering chart reload.
+
+## Current comparison filter
+
+The current active filter is path-distance based and replaces the old green-last-candle display rule.
+
+### Goal
+
+The goal is to show only symbols that are moving sufficiently independently from the two market leaders:
+- `BTCUSDT`
+- `ETHUSDT`
+
+### Current filter rule
+
+For every non-forced symbol:
+1. take the last `comparisonWindow` candles of that symbol;
+2. take the last `comparisonWindow` candles of `BTCUSDT`;
+3. take the last `comparisonWindow` candles of `ETHUSDT`;
+4. build normalized close paths using the first close in the window as the base;
+5. calculate average absolute distance between the normalized symbol path and the normalized BTC path;
+6. calculate average absolute distance between the normalized symbol path and the normalized ETH path;
+7. keep the smaller of the two distances;
+8. display the symbol only if that minimum distance is greater than `distanceThreshold`.
+
+### Current normalization rule
+
+Normalized close path is built as:
+
+`(Close_i / Close_0) - 1`
+
+This means:
+- the first point of every window is `0`;
+- comparison is done by shape of movement rather than by absolute price level;
+- instruments with very different price scales remain comparable.
+
+### Current distance metric
+
+Current comparison uses average absolute point-by-point distance across the normalized path.
+
+This is intentionally simple and is the baseline implementation.
+It should remain the default unless a better algorithm is explicitly requested.
+
+### Current filter parameters
+
+Current runtime parameters:
+- `comparisonWindow`
+- `distanceThreshold`
+
+Current defaults in the code/UI:
+- `comparisonWindow = 50`
+- `distanceThreshold = 0.03m`
+
+These values are tuning defaults, not fixed product truths.
+
+### Current parameter UI
+
+The form currently exposes:
+- `numericComparisonWindow`
+- `numericDistanceThreshold`
+
+These controls are intended for live experimentation.
+Changing them should:
+- re-screen the visible symbols from cache;
+- preserve selection;
+- avoid unnecessary selected-chart reload;
+- avoid market REST reload.
 
 ## Forced symbol policy
 
@@ -243,7 +332,7 @@ The following symbols must always be shown:
 - `ETHUSDT`
 
 These are product rules, not hacks.
-They must remain visible even when real screening logic is expanded later.
+They must remain visible even when screening logic is expanded later.
 
 ## Binance interval policy
 
@@ -286,10 +375,11 @@ The display list comes from `MarketCacheService`.
 The currently selected chart is still loaded independently through `BinanceRestService` and updated through `BinanceWebSocketService`.
 
 This separation is intentional:
-- `MarketCacheService` supports market bootstrap and future screening;
+- `MarketCacheService` supports market bootstrap and screening;
 - selected-symbol chart loading uses a fresh authoritative source;
 - chart correctness is more important than avoiding reloads;
-- redundant reloads caused by internal selection restoration are not acceptable and must be suppressed.
+- redundant reloads caused by internal selection restoration are not acceptable and must be suppressed;
+- changing screen/filter settings must not be treated as a reason to reload the selected chart.
 
 ## Real-time policy
 
@@ -319,7 +409,8 @@ Specifically:
 - `ListBoxSymbols_SelectedIndexChanged(...)` must immediately return while suppression is active;
 - the handler must also ignore cases where the selected symbol equals `currentChartSymbol`;
 - market-driven list updates must not trigger redundant chart reloads;
-- market-driven list updates must not cause button flicker or unstable selection.
+- market-driven list updates must not cause button flicker or unstable selection;
+- filter-parameter-driven list rebuilds must not trigger redundant chart reloads.
 
 ### Legacy rebinding rule
 
@@ -327,6 +418,11 @@ Specifically:
 It is intentionally not used in live symbol updates because it previously caused unstable selection and `STOP` button flicker.
 
 Do not reintroduce high-frequency full rebinding without a more stable strategy.
+
+At the same time, a controlled list rebuild from cache is currently acceptable when comparison parameters change, provided that:
+- selection is suppressed during restoration;
+- the rebuild does not trigger `ReloadChartAndStreamAsync()`;
+- the rebuild does not cause REST reloading of market data.
 
 ## Critical implementation facts
 
@@ -446,6 +542,24 @@ The chart currently relies on per-point coloring:
 
 Do not remove point-level candle coloring unless the wick/tail coloring problem is solved and visually verified.
 
+### 12. Comparison filter uses normalized close-path distance
+
+The current market screening logic for non-forced symbols is based on:
+- normalized close-path construction from recent candles;
+- comparison against `BTCUSDT` and `ETHUSDT`;
+- average absolute distance across the normalized path.
+
+This is the current baseline algorithm and must not be silently replaced by another comparison method without explicit discussion.
+
+### 13. `candlesBySymbol` is the canonical market cache store
+
+Inside `MarketCacheService`, the canonical in-memory storage is:
+
+- `candlesBySymbol`
+
+Do not introduce parallel duplicate symbol-to-candles stores unless there is a strong reason.
+New screening logic should use `candlesBySymbol` as the source of truth.
+
 ## Architectural rules
 
 1. Do not mix constants and settings.
@@ -457,6 +571,7 @@ Do not remove point-level candle coloring unless the wick/tail coloring problem 
 7. Prefer practical reliability over abstract architectural purity.
 8. Do not introduce event-driven UI side effects that cause redundant REST reloads.
 9. Prefer incremental list maintenance over high-frequency full list rebinding.
+10. Prefer screening based on current in-memory market cache over extra REST requests when only filter parameters change.
 
 ## Decisions that are already settled
 
@@ -476,6 +591,8 @@ Do not reopen these without an explicit request.
 - UI stability has higher priority than aggressive real-time list refresh.
 - Market-driven symbol list changes must preserve selection and must not trigger redundant chart reload.
 - Point-level candle coloring is currently an accepted implementation detail.
+- The current first screening algorithm is normalized close-path distance against BTCUSDT and ETHUSDT.
+- Comparison settings are currently controlled from the main form, not from `Properties.Settings`.
 
 ## Guidance for future suggestions
 
@@ -500,7 +617,8 @@ Good reasons:
 - better separation of responsibilities;
 - safer real-time updates;
 - clearer settings handling;
-- faster or cleaner market bootstrap.
+- faster or cleaner market bootstrap;
+- better comparability diagnostics for symbol-screening results.
 
 Weak reasons:
 - abstract clean architecture purity;
@@ -510,7 +628,10 @@ Weak reasons:
 ## Expected next directions
 
 Likely future work includes:
-- expanding real filter logic beyond the current green-last-candle rule;
+- tuning the current `comparisonWindow` and `distanceThreshold`;
+- exposing more readable diagnostics for why a symbol was included or excluded;
+- optional display of distance-to-BTC / distance-to-ETH values;
+- expanding screening logic beyond the current single distance rule;
 - pattern detection logic;
 - candle analysis helpers;
 - expanding `MarketCacheService`;
@@ -520,13 +641,14 @@ Likely future work includes:
 - a settings form;
 - additional services built on top of the existing baseline.
 
-If dynamic symbol refresh is extended further, it should:
+If symbol screening is extended further, it should:
 - update cache first;
-- prefer item-level add/remove over full rebinding;
+- prefer item-level add/remove over full rebinding in high-frequency realtime updates;
 - preserve correct manual symbol switching;
 - preserve stable `STOP` button behavior;
 - preserve selected-chart continuity;
-- avoid extra REST chart reloads.
+- avoid extra REST chart reloads;
+- reuse the existing market cache instead of introducing unnecessary parallel data sources.
 
 Future work should preserve the already working behavior:
 - market bootstrap;
@@ -539,7 +661,8 @@ Future work should preserve the already working behavior:
 - selected-symbol dedicated WebSocket real-time updates;
 - candle continuity checks;
 - selected-symbol resync behavior;
-- suppression of false reloads caused by internal selection restoration.
+- suppression of false reloads caused by internal selection restoration;
+- runtime adjustment of comparison filter settings without market REST reload.
 
 ## Preferred collaboration style
 
