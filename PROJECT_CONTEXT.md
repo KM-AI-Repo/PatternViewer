@@ -44,6 +44,7 @@ The current direction is:
 - always keep forced symbols visible;
 - allow chart viewing and real-time updates for the selected symbol;
 - identify futures whose recent price path is sufficiently different from BTCUSDT and ETHUSDT;
+- allow temporary validation of the comparison algorithm by switching to a “show similar” mode;
 - prepare the codebase for future screening and pattern detection.
 
 Current implemented behavior:
@@ -59,11 +60,13 @@ Current implemented behavior:
 - allow single-symbol selection;
 - allow interval selection;
 - persist the selected interval in `Properties.Settings`;
+- persist comparison filter parameters in `Properties.Settings`;
 - load the selected chart through REST;
 - update the selected chart through a dedicated WebSocket;
 - resync the selected chart if candle continuity is broken;
-- expose live similarity-filter parameters on the form;
-- re-screen symbols from cache when similarity-filter parameters are changed without reloading market data through REST.
+- expose live comparison-filter parameters on the form;
+- expose a temporary mode switch for displaying similar instead of dissimilar symbols;
+- re-screen symbols from cache when comparison-filter parameters are changed without reloading market data through REST.
 
 ## Current architecture
 
@@ -79,6 +82,7 @@ Form responsibilities:
 - initialize controls;
 - initialize supported intervals;
 - initialize chart styling;
+- load persisted comparison settings into controls;
 - apply current filter parameters to `MarketCacheService`;
 - trigger market loading;
 - build and maintain the visible symbols list;
@@ -117,7 +121,7 @@ Responsibilities:
 - provide symbols eligible for display;
 - enforce forced-symbol inclusion;
 - compare non-forced symbols against BTCUSDT and ETHUSDT by normalized recent close-path distance;
-- store and apply `comparisonWindow` and `distanceThreshold`;
+- store and apply `comparisonWindow`, `distanceThreshold`, and temporary comparison direction mode;
 - update cached candles in real time;
 - request targeted symbol resync when continuity is broken;
 - serve as the base for future screening logic.
@@ -166,11 +170,13 @@ Examples:
 - default symbol
 - default interval
 - default candle limit
+- default comparison window
+- default distance threshold
 
 Important current distinction:
-- comparison filter runtime values are currently taken from WinForms controls on the main form;
-- Binance interval options remain hardcoded immutable values;
-- comparison filter values are not currently stored in `Properties.Settings`.
+- comparison filter values `DefaultComparisonWindow` and `DefaultDistanceThreshold` are now persisted in `Properties.Settings`;
+- the temporary `show similar` validation mode is still controlled by the form checkbox and is not persisted in settings;
+- Binance interval options remain hardcoded immutable values.
 
 ## Current runtime flow
 
@@ -179,6 +185,7 @@ Important current distinction:
 On form load, the application:
 - initializes chart styling;
 - initializes the supported interval list;
+- loads persisted comparison settings into controls;
 - applies current comparison settings from the form controls to `MarketCacheService`;
 - creates an empty candle list;
 - draws an empty chart;
@@ -225,17 +232,18 @@ For all tracked symbols:
 6. if continuity is valid, cache is updated normally;
 7. if continuity is broken, the app triggers targeted REST resync only for that symbol;
 8. UI visibility is updated per symbol through add/remove operations instead of full list rebinding;
-9. visibility is decided by `MarketCacheService.ShouldDisplaySymbol(symbol)` using the current comparison filter.
+9. visibility is decided by `MarketCacheService.ShouldDisplaySymbol(symbol)` using the current comparison filter and current comparison mode.
 
 ### Comparison settings change flow
 
 When the user changes comparison controls on the form:
-1. form reads `numericComparisonWindow` and `numericDistanceThreshold`;
-2. form passes those values into `marketCacheService.SetSimilarityFilterSettings(...)`;
-3. form rebuilds the visible symbols list from current in-memory cache;
-4. selection is preserved under suppression;
-5. selected chart is not reloaded only because filter settings changed;
-6. no REST reload of market candles is performed.
+1. form reads `numericComparisonWindow`, `numericDistanceThreshold`, and `checkBoxShowSimilar`;
+2. form persists `numericComparisonWindow` and `numericDistanceThreshold` into `Properties.Settings`;
+3. form passes the current values into `marketCacheService.SetSimilarityFilterSettings(...)`;
+4. form rebuilds the visible symbols list from current in-memory cache;
+5. selection is preserved under suppression;
+6. selected chart is not reloaded only because filter settings changed;
+7. no REST reload of market candles is performed.
 
 ### Stop button flow
 
@@ -253,7 +261,8 @@ The visible symbol list is produced by `MarketCacheService.GetDisplaySymbols()`:
 - forced symbols are always included;
 - additional symbols may be included by filter logic;
 - symbols without cached candles are excluded;
-- currently the filter keeps symbols whose recent normalized close-path is sufficiently different from both BTCUSDT and ETHUSDT.
+- currently the filter is driven by normalized close-path distance to BTCUSDT and ETHUSDT;
+- the final inclusion rule may be inverted temporarily by the “show similar” mode.
 
 The visible list is then maintained in the UI incrementally:
 - `AddSymbolToListBox(...)` inserts a symbol into the sorted list;
@@ -266,9 +275,11 @@ The current active filter is path-distance based and replaces the old green-last
 
 ### Goal
 
-The goal is to show only symbols that are moving sufficiently independently from the two market leaders:
+The main goal is to show symbols that are moving sufficiently independently from the two market leaders:
 - `BTCUSDT`
 - `ETHUSDT`
+
+There is also a temporary validation mode that shows symbols whose graphs are sufficiently similar to the leaders instead.
 
 ### Current filter rule
 
@@ -280,7 +291,7 @@ For every non-forced symbol:
 5. calculate average absolute distance between the normalized symbol path and the normalized BTC path;
 6. calculate average absolute distance between the normalized symbol path and the normalized ETH path;
 7. keep the smaller of the two distances;
-8. display the symbol only if that minimum distance is greater than `distanceThreshold`.
+8. apply the final inclusion rule depending on current mode.
 
 ### Current normalization rule
 
@@ -305,10 +316,14 @@ It should remain the default unless a better algorithm is explicitly requested.
 Current runtime parameters:
 - `comparisonWindow`
 - `distanceThreshold`
+- `showSimilarSymbols`
 
-Current defaults in the code/UI:
-- `comparisonWindow = 50`
-- `distanceThreshold = 0.03m`
+Current persisted defaults:
+- `DefaultComparisonWindow = 50`
+- `DefaultDistanceThreshold = 0.1`
+
+Current runtime default for comparison mode:
+- `showSimilarSymbols = false`
 
 These values are tuning defaults, not fixed product truths.
 
@@ -317,13 +332,36 @@ These values are tuning defaults, not fixed product truths.
 The form currently exposes:
 - `numericComparisonWindow`
 - `numericDistanceThreshold`
+- `checkBoxShowSimilar`
 
-These controls are intended for live experimentation.
-Changing them should:
+These controls are intended for live experimentation and algorithm validation.
+
+Changing `numericComparisonWindow` or `numericDistanceThreshold` should:
+- persist the new value in `Properties.Settings`;
 - re-screen the visible symbols from cache;
 - preserve selection;
 - avoid unnecessary selected-chart reload;
 - avoid market REST reload.
+
+Changing `checkBoxShowSimilar` should:
+- switch only the final inclusion rule of the current algorithm;
+- re-screen the visible symbols from cache;
+- preserve selection;
+- avoid unnecessary selected-chart reload;
+- avoid market REST reload.
+
+### Current inclusion logic
+
+Current inclusion logic is:
+
+- when `showSimilarSymbols == false`:
+  - display symbol only if `minDistance > distanceThreshold`
+
+- when `showSimilarSymbols == true`:
+  - display symbol only if `minDistance <= distanceThreshold`
+
+This temporary inversion mode exists for practical validation of the current comparison algorithm.
+It should not be treated as a different algorithm.
 
 ## Forced symbol policy
 
@@ -354,6 +392,18 @@ When the user changes the interval:
 - it should persist between launches.
 
 This is intentional.
+
+## Comparison settings persistence policy
+
+The comparison window and distance threshold are user state.
+
+When the user changes them:
+- they become the new default values in `Properties.Settings`;
+- they should persist between launches.
+
+This is intentional.
+
+At the moment, the temporary `show similar` validation mode is not part of persisted settings.
 
 ## Market bootstrap policy
 
@@ -560,6 +610,18 @@ Inside `MarketCacheService`, the canonical in-memory storage is:
 Do not introduce parallel duplicate symbol-to-candles stores unless there is a strong reason.
 New screening logic should use `candlesBySymbol` as the source of truth.
 
+### 14. `showSimilarSymbols` only changes final inclusion direction
+
+The temporary similar/dissimilar switch does not change:
+- normalization;
+- reference symbols;
+- distance calculation;
+- comparison window.
+
+It only changes the final inclusion rule:
+- dissimilar mode uses `minDistance > distanceThreshold`;
+- similar mode uses `minDistance <= distanceThreshold`.
+
 ## Architectural rules
 
 1. Do not mix constants and settings.
@@ -592,7 +654,8 @@ Do not reopen these without an explicit request.
 - Market-driven symbol list changes must preserve selection and must not trigger redundant chart reload.
 - Point-level candle coloring is currently an accepted implementation detail.
 - The current first screening algorithm is normalized close-path distance against BTCUSDT and ETHUSDT.
-- Comparison settings are currently controlled from the main form, not from `Properties.Settings`.
+- `comparisonWindow` and `distanceThreshold` are now persisted in `Properties.Settings`.
+- The `show similar` switch is currently a temporary validation tool and is not persisted in settings.
 
 ## Guidance for future suggestions
 
@@ -629,6 +692,7 @@ Weak reasons:
 
 Likely future work includes:
 - tuning the current `comparisonWindow` and `distanceThreshold`;
+- evaluating whether the temporary `show similar` mode should remain, be removed, or become a permanent diagnostic feature;
 - exposing more readable diagnostics for why a symbol was included or excluded;
 - optional display of distance-to-BTC / distance-to-ETH values;
 - expanding screening logic beyond the current single distance rule;
@@ -656,6 +720,8 @@ Future work should preserve the already working behavior:
 - forced symbol inclusion;
 - interval selection;
 - interval persistence;
+- comparison window persistence;
+- distance threshold persistence;
 - symbol display through `MarketCacheService`;
 - selected-symbol REST loading;
 - selected-symbol dedicated WebSocket real-time updates;
