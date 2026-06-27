@@ -28,9 +28,9 @@
         /// </summary>
         private void InitializeComponent()
         {
-            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea1 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
-            System.Windows.Forms.DataVisualization.Charting.Legend legend1 = new System.Windows.Forms.DataVisualization.Charting.Legend();
-            System.Windows.Forms.DataVisualization.Charting.Series series1 = new System.Windows.Forms.DataVisualization.Charting.Series();
+            System.Windows.Forms.DataVisualization.Charting.ChartArea chartArea4 = new System.Windows.Forms.DataVisualization.Charting.ChartArea();
+            System.Windows.Forms.DataVisualization.Charting.Legend legend4 = new System.Windows.Forms.DataVisualization.Charting.Legend();
+            System.Windows.Forms.DataVisualization.Charting.Series series4 = new System.Windows.Forms.DataVisualization.Charting.Series();
             this.listBoxSymbols = new System.Windows.Forms.ListBox();
             this.comboBoxInterval = new System.Windows.Forms.ComboBox();
             this.chartCandles = new System.Windows.Forms.DataVisualization.Charting.Chart();
@@ -41,6 +41,7 @@
             this.numericComparisonWindow = new System.Windows.Forms.NumericUpDown();
             this.lblSimilarityThreshold = new System.Windows.Forms.Label();
             this.numericDistanceThreshold = new System.Windows.Forms.NumericUpDown();
+            this.checkBoxShowSimilar = new System.Windows.Forms.CheckBox();
             ((System.ComponentModel.ISupportInitialize)(this.chartCandles)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numericComparisonWindow)).BeginInit();
             ((System.ComponentModel.ISupportInitialize)(this.numericDistanceThreshold)).BeginInit();
@@ -66,17 +67,17 @@
             // 
             // chartCandles
             // 
-            chartArea1.Name = "ChartArea1";
-            this.chartCandles.ChartAreas.Add(chartArea1);
-            legend1.Name = "Legend1";
-            this.chartCandles.Legends.Add(legend1);
+            chartArea4.Name = "ChartArea1";
+            this.chartCandles.ChartAreas.Add(chartArea4);
+            legend4.Name = "Legend1";
+            this.chartCandles.Legends.Add(legend4);
             this.chartCandles.Location = new System.Drawing.Point(192, 36);
             this.chartCandles.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
             this.chartCandles.Name = "chartCandles";
-            series1.ChartArea = "ChartArea1";
-            series1.Legend = "Legend1";
-            series1.Name = "Series1";
-            this.chartCandles.Series.Add(series1);
+            series4.ChartArea = "ChartArea1";
+            series4.Legend = "Legend1";
+            series4.Name = "Series1";
+            this.chartCandles.Series.Add(series4);
             this.chartCandles.Size = new System.Drawing.Size(1131, 757);
             this.chartCandles.TabIndex = 4;
             this.chartCandles.Text = "chart1";
@@ -84,7 +85,7 @@
             // lblStatus
             // 
             this.lblStatus.AutoSize = true;
-            this.lblStatus.Location = new System.Drawing.Point(587, 12);
+            this.lblStatus.Location = new System.Drawing.Point(676, 11);
             this.lblStatus.Name = "lblStatus";
             this.lblStatus.Size = new System.Drawing.Size(37, 13);
             this.lblStatus.TabIndex = 5;
@@ -92,7 +93,7 @@
             // 
             // btnStart
             // 
-            this.btnStart.Location = new System.Drawing.Point(466, 7);
+            this.btnStart.Location = new System.Drawing.Point(554, 6);
             this.btnStart.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
             this.btnStart.Name = "btnStart";
             this.btnStart.Size = new System.Drawing.Size(56, 21);
@@ -102,7 +103,7 @@
             // 
             // btnStop
             // 
-            this.btnStop.Location = new System.Drawing.Point(526, 7);
+            this.btnStop.Location = new System.Drawing.Point(614, 6);
             this.btnStop.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
             this.btnStop.Name = "btnStop";
             this.btnStop.Size = new System.Drawing.Size(56, 21);
@@ -179,11 +180,23 @@
             0,
             131072});
             // 
+            // checkBoxShowSimilar
+            // 
+            this.checkBoxShowSimilar.AutoSize = true;
+            this.checkBoxShowSimilar.Location = new System.Drawing.Point(466, 9);
+            this.checkBoxShowSimilar.Margin = new System.Windows.Forms.Padding(2, 2, 2, 2);
+            this.checkBoxShowSimilar.Name = "checkBoxShowSimilar";
+            this.checkBoxShowSimilar.Size = new System.Drawing.Size(84, 17);
+            this.checkBoxShowSimilar.TabIndex = 12;
+            this.checkBoxShowSimilar.Text = "Show similar";
+            this.checkBoxShowSimilar.UseVisualStyleBackColor = true;
+            // 
             // Form1
             // 
             this.AutoScaleDimensions = new System.Drawing.SizeF(6F, 13F);
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.ClientSize = new System.Drawing.Size(1334, 805);
+            this.Controls.Add(this.checkBoxShowSimilar);
             this.Controls.Add(this.numericDistanceThreshold);
             this.Controls.Add(this.lblSimilarityThreshold);
             this.Controls.Add(this.numericComparisonWindow);
@@ -217,6 +230,7 @@
         private System.Windows.Forms.NumericUpDown numericComparisonWindow;
         private System.Windows.Forms.Label lblSimilarityThreshold;
         private System.Windows.Forms.NumericUpDown numericDistanceThreshold;
+        private System.Windows.Forms.CheckBox checkBoxShowSimilar;
     }
 }
 

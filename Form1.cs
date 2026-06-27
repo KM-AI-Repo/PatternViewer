@@ -27,6 +27,7 @@ namespace BinanceFuturesViewer
         private bool isResyncInProgress;
         private bool isRunning;
         private bool suppressSymbolSelectionChanged;
+        private bool suppressComparisonSettingsChanged;
 
         private string currentChartSymbol;
 
@@ -58,6 +59,8 @@ namespace BinanceFuturesViewer
             numericComparisonWindow.ValueChanged += NumericSimilarityWindow_ValueChanged;
             numericDistanceThreshold.ValueChanged += NumericSimilarityThreshold_ValueChanged;
 
+            checkBoxShowSimilar.CheckedChanged += CheckBoxShowSimilar_CheckedChanged;
+
             listBoxSymbols.SelectionMode = SelectionMode.One;
 
             comboBoxInterval.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -67,6 +70,7 @@ namespace BinanceFuturesViewer
         {
             InitializeChart();
             InitializeIntervals();
+            LoadComparisonSettingsToControls();
             ApplySimilaritySettingsToMarketCache();
 
             lock (candlesLock)
@@ -98,6 +102,34 @@ namespace BinanceFuturesViewer
                 comboBoxInterval.SelectedItem = defaultInterval;
             else
                 comboBoxInterval.SelectedItem = "1h";
+        }
+
+        private void LoadComparisonSettingsToControls()
+        {
+            suppressComparisonSettingsChanged = true;
+
+            try
+            {
+                decimal threshold = Properties.Settings.Default.DefaultDistanceThreshold;
+                int window = Properties.Settings.Default.DefaultComparisonWindow;
+
+                if (window < (int)numericComparisonWindow.Minimum)
+                    window = (int)numericComparisonWindow.Minimum;
+                if (window > (int)numericComparisonWindow.Maximum)
+                    window = (int)numericComparisonWindow.Maximum;
+
+                if (threshold < numericDistanceThreshold.Minimum)
+                    threshold = numericDistanceThreshold.Minimum;
+                if (threshold > numericDistanceThreshold.Maximum)
+                    threshold = numericDistanceThreshold.Maximum;
+
+                numericComparisonWindow.Value = window;
+                numericDistanceThreshold.Value = threshold;
+            }
+            finally
+            {
+                suppressComparisonSettingsChanged = false;
+            }
         }
 
         private void InitializeChart()
@@ -806,16 +838,45 @@ namespace BinanceFuturesViewer
         {
             marketCacheService.SetSimilarityFilterSettings(
                 (int)numericComparisonWindow.Value,
-                (decimal)numericDistanceThreshold.Value);
+                (decimal)numericDistanceThreshold.Value,
+                checkBoxShowSimilar.Checked);
         }
 
         private async void NumericSimilarityWindow_ValueChanged(object sender, EventArgs e)
         {
+            if (suppressComparisonSettingsChanged)
+                return;
+
+            int newValue = (int)numericComparisonWindow.Value;
+
+            if (Properties.Settings.Default.DefaultComparisonWindow != newValue)
+            {
+                Properties.Settings.Default.DefaultComparisonWindow = newValue;
+                Properties.Settings.Default.Save();
+            }
+
             ApplySimilaritySettingsToMarketCache();
             await RefreshVisibleSymbolsFromCacheAsync();
         }
 
         private async void NumericSimilarityThreshold_ValueChanged(object sender, EventArgs e)
+        {
+            if (suppressComparisonSettingsChanged)
+                return;
+
+            decimal newValue = numericDistanceThreshold.Value;
+
+            if (Properties.Settings.Default.DefaultDistanceThreshold != newValue)
+            {
+                Properties.Settings.Default.DefaultDistanceThreshold = newValue;
+                Properties.Settings.Default.Save();
+            }
+
+            ApplySimilaritySettingsToMarketCache();
+            await RefreshVisibleSymbolsFromCacheAsync();
+        }
+
+        private async void CheckBoxShowSimilar_CheckedChanged(object sender, EventArgs e)
         {
             ApplySimilaritySettingsToMarketCache();
             await RefreshVisibleSymbolsFromCacheAsync();

@@ -106,5 +106,29 @@ namespace BinanceFuturesViewer.Properties {
                 this["DefaultCandlesLimit"] = value;
             }
         }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("50")]
+        public int DefaultComparisonWindow {
+            get {
+                return ((int)(this["DefaultComparisonWindow"]));
+            }
+            set {
+                this["DefaultComparisonWindow"] = value;
+            }
+        }
+        
+        [global::System.Configuration.UserScopedSettingAttribute()]
+        [global::System.Diagnostics.DebuggerNonUserCodeAttribute()]
+        [global::System.Configuration.DefaultSettingValueAttribute("0.1")]
+        public decimal DefaultDistanceThreshold {
+            get {
+                return ((decimal)(this["DefaultDistanceThreshold"]));
+            }
+            set {
+                this["DefaultDistanceThreshold"] = value;
+            }
+        }
     }
 }

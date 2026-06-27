@@ -20,6 +20,7 @@ namespace BinanceFuturesViewer.Services
 
         private int comparisonWindow = 50;
         private decimal distanceThreshold = 0.03m;
+        private bool showSimilarSymbols;
 
         public async Task InitializeAsync(string interval, int candleLimit)
         {
@@ -166,6 +167,9 @@ namespace BinanceFuturesViewer.Services
 
             minDistance = Math.Min(distanceToBtc, distanceToEth);
 
+            if (showSimilarSymbols)
+                return minDistance <= threshold;
+
             return minDistance > threshold;
         }
 
@@ -297,7 +301,7 @@ namespace BinanceFuturesViewer.Services
             }
         }
 
-        public void SetSimilarityFilterSettings(int window, decimal threshold)
+        public void SetSimilarityFilterSettings(int window, decimal threshold, bool showSimilar)
         {
             if (window < 2)
                 window = 2;
@@ -307,6 +311,7 @@ namespace BinanceFuturesViewer.Services
 
             comparisonWindow = window;
             distanceThreshold = threshold;
+            showSimilarSymbols = showSimilar;
         }
 
         private List<BinanceCandle> GetLastWindow(List<BinanceCandle> source, int window)
